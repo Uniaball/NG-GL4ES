@@ -317,6 +317,8 @@ typedef struct {
     GLuint copy_write;
     GLuint copy_read;
     GLuint texture;
+    GLuint pack;
+    GLuint unpack;
 } bind_buffers_t;
 
 #endif // _GL4ES_STATE_H_

@@ -585,9 +585,9 @@ static void* swizzle_texture(GLsizei width, GLsizei height, GLenum* format, GLen
     //     internal2format_type(&intermediaryformat, &dest_format, &dest_type);
     //     convert = 1;
     //     check = 0;
-    // }
+    // } else
 
-    else {
+    {
         if ((*type) == GL_HALF_FLOAT) (*type) = GL_HALF_FLOAT_OES; // the define is different between GL and GLES...
         switch (*format) {
         case GL_R:

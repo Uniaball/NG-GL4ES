@@ -205,7 +205,7 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
         go_real = 1;
 
     if (target == GL_UNIFORM_BUFFER || target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER ||
-        target == GL_TEXTURE_BUFFER)
+        target == GL_TEXTURE_BUFFER || target == GL_PIXEL_PACK_BUFFER || target == GL_PIXEL_UNPACK_BUFFER)
         go_real = 1;
 
     if (buff->real_buffer && !go_real) {
@@ -265,7 +265,7 @@ void APIENTRY_GL4ES gl4es_glNamedBufferData(GLuint buffer, GLsizeiptr size, cons
         go_real = 1;
 
     if (buff->type == GL_UNIFORM_BUFFER || buff->type == GL_COPY_WRITE_BUFFER || buff->type == GL_COPY_READ_BUFFER ||
-        buff->type == GL_TEXTURE_BUFFER)
+        buff->type == GL_TEXTURE_BUFFER || buff->type == GL_PIXEL_PACK_BUFFER || buff->type == GL_PIXEL_UNPACK_BUFFER)
         go_real = 1;
 
     if (buff->real_buffer && !go_real) {
@@ -321,7 +321,8 @@ void APIENTRY_GL4ES gl4es_glBufferSubData(GLenum target, GLintptr offset, GLsize
     }
 
     if ((target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER || target == GL_UNIFORM_BUFFER ||
-         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER) &&
+         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER ||
+         target == GL_PIXEL_PACK_BUFFER || target == GL_PIXEL_UNPACK_BUFFER) &&
         buff->real_buffer) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -346,7 +347,8 @@ void APIENTRY_GL4ES gl4es_glNamedBufferSubData(GLuint buffer, GLintptr offset, G
     }
 
     if ((buff->type == GL_ARRAY_BUFFER || buff->type == GL_ELEMENT_ARRAY_BUFFER || buff->type == GL_UNIFORM_BUFFER ||
-         buff->type == GL_COPY_WRITE_BUFFER || buff->type == GL_COPY_READ_BUFFER || buff->type == GL_TEXTURE_BUFFER) &&
+         buff->type == GL_COPY_WRITE_BUFFER || buff->type == GL_COPY_READ_BUFFER || buff->type == GL_TEXTURE_BUFFER ||
+         buff->type == GL_PIXEL_PACK_BUFFER || buff->type == GL_PIXEL_UNPACK_BUFFER) &&
         buff->real_buffer) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -538,7 +540,8 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 
     if (buff->real_buffer &&
         (target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER || target == GL_UNIFORM_BUFFER ||
-         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER) &&
+         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER ||
+         target == GL_PIXEL_PACK_BUFFER || target == GL_PIXEL_UNPACK_BUFFER) &&
         buff->mapped && !buff->ranged && (buff->access == GL_WRITE_ONLY || buff->access == GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -548,7 +551,8 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 
     if (buff->real_buffer &&
         (target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER || target == GL_UNIFORM_BUFFER ||
-         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER) &&
+         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER ||
+         target == GL_PIXEL_PACK_BUFFER || target == GL_PIXEL_UNPACK_BUFFER) &&
         buff->mapped && buff->ranged && (buff->access & GL_MAP_WRITE_BIT_EXT) &&
         !(buff->access & GL_MAP_FLUSH_EXPLICIT_BIT_EXT)) {
         LOAD_GLES(glBufferSubData);
@@ -576,7 +580,8 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
 
     if (buff->real_buffer &&
         (buff->type == GL_ARRAY_BUFFER || buff->type == GL_ELEMENT_ARRAY_BUFFER || buff->type == GL_UNIFORM_BUFFER ||
-         buff->type == GL_COPY_WRITE_BUFFER || buff->type == GL_COPY_READ_BUFFER || buff->type == GL_TEXTURE_BUFFER) &&
+         buff->type == GL_COPY_WRITE_BUFFER || buff->type == GL_COPY_READ_BUFFER || buff->type == GL_TEXTURE_BUFFER ||
+         buff->type == GL_PIXEL_PACK_BUFFER || buff->type == GL_PIXEL_UNPACK_BUFFER) &&
         buff->mapped && (buff->access == GL_WRITE_ONLY || buff->access == GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -586,7 +591,8 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
 
     if (buff->real_buffer &&
         (buff->type == GL_ARRAY_BUFFER || buff->type == GL_ELEMENT_ARRAY_BUFFER || buff->type == GL_UNIFORM_BUFFER ||
-         buff->type == GL_COPY_WRITE_BUFFER || buff->type == GL_COPY_READ_BUFFER || buff->type == GL_TEXTURE_BUFFER) &&
+         buff->type == GL_COPY_WRITE_BUFFER || buff->type == GL_COPY_READ_BUFFER || buff->type == GL_TEXTURE_BUFFER ||
+         buff->type == GL_PIXEL_PACK_BUFFER || buff->type == GL_PIXEL_UNPACK_BUFFER) &&
         buff->mapped && buff->ranged && (buff->access & GL_MAP_WRITE_BIT_EXT) &&
         !(buff->access & GL_MAP_FLUSH_EXPLICIT_BIT_EXT)) {
         LOAD_GLES(glBufferSubData);
@@ -705,9 +711,11 @@ void APIENTRY_GL4ES gl4es_glFlushMappedBufferRange(GLenum target, GLintptr offse
         return;
     }
 
+    // UBO FIX: Add GL_UNIFORM_BUFFER to the condition for flushing data.
     if (buff->real_buffer &&
         (target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER || target == GL_UNIFORM_BUFFER ||
-         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER) &&
+         target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER ||
+         target == GL_PIXEL_PACK_BUFFER || target == GL_PIXEL_UNPACK_BUFFER) &&
         (buff->access & GL_MAP_WRITE_BIT_EXT)) {
         LOAD_GLES(glBufferSubData);
         bindBuffer(buff->type, buff->real_buffer);
@@ -736,36 +744,32 @@ void APIENTRY_GL4ES gl4es_glCopyBufferSubData(GLenum readTarget, GLenum writeTar
         return;
     }
 
-    LOAD_GLES3(glCopyBufferSubData);
-    if (!gles_glCopyBufferSubData) {
-        if (writebuff->real_buffer &&
-            (writebuff->type == GL_ARRAY_BUFFER || writebuff->type == GL_ELEMENT_ARRAY_BUFFER ||
-             writebuff->type == GL_UNIFORM_BUFFER || writebuff->type == GL_COPY_WRITE_BUFFER ||
-             writebuff->type == GL_COPY_READ_BUFFER || writebuff->type == GL_TEXTURE_BUFFER) &&
-            writebuff->mapped && (writebuff->access == GL_WRITE_ONLY || writebuff->access == GL_READ_WRITE)) {
-            LOAD_GLES(glBufferSubData);
-            bindBuffer(writebuff->type, writebuff->real_buffer);
-            gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
-        }
-
-        if (readTarget == GL_COPY_READ_BUFFER) {
-            DBG(SHUT_LOGD("GL_ARRAY_BUFFER data: %p\nGL_COPY_READ_BUFFER data: %p\n",
-                          getbuffer_buffer(GL_ARRAY_BUFFER)->data, readbuff->data);)
-            LOAD_GLES(glBufferSubData);
-            glstate->vao->write = writebuff;
-            bindBuffer(writebuff->type, writebuff->real_buffer);
-            gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
-        }
-    } else {
-        glstate->vao->read = readbuff;
-        bindBuffer(readTarget, readbuff->real_buffer);
-        glstate->vao->write = writebuff;
-        bindBuffer(writeTarget, writebuff->real_buffer);
-
-        gles_glCopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size);
+    if ((writebuff->ranged && !(writebuff->access & GL_MAP_PERSISTENT_BIT)) && readTarget != GL_COPY_READ_BUFFER) {
+        errorShim(GL_INVALID_OPERATION);
+        return;
     }
 
     memcpy((char*)writebuff->data + writeOffset, (char*)readbuff->data + readOffset, size);
+
+    if (writebuff->real_buffer &&
+        (writebuff->type == GL_ARRAY_BUFFER || writebuff->type == GL_ELEMENT_ARRAY_BUFFER ||
+         writebuff->type == GL_UNIFORM_BUFFER || writebuff->type == GL_COPY_WRITE_BUFFER ||
+         writebuff->type == GL_COPY_READ_BUFFER || writebuff->type == GL_TEXTURE_BUFFER ||
+         writebuff->type == GL_PIXEL_PACK_BUFFER || writebuff->type == GL_PIXEL_UNPACK_BUFFER) &&
+        writebuff->mapped && (writebuff->access == GL_WRITE_ONLY || writebuff->access == GL_READ_WRITE)) {
+        LOAD_GLES(glBufferSubData);
+        bindBuffer(writebuff->type, writebuff->real_buffer);
+        gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
+    }
+
+    if (readTarget == GL_COPY_READ_BUFFER) {
+        DBG(SHUT_LOGD("GL_ARRAY_BUFFER data: %p\nGL_COPY_READ_BUFFER data: %p\n",
+                      getbuffer_buffer(GL_ARRAY_BUFFER)->data, readbuff->data);)
+        LOAD_GLES(glBufferSubData);
+        glstate->vao->write = writebuff;
+        bindBuffer(writebuff->type, writebuff->real_buffer);
+        gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
+    }
 
     noerrorShim();
 }
@@ -894,6 +898,16 @@ void bindBuffer(GLenum target, GLuint buffer) {
         glstate->bind_buffer.texture = buffer;
         DBG(SHUT_LOGD("Bind buffer %d to GL_TEXTURE_BUFFER\n", buffer);)
         gles_glBindBuffer(target, buffer);
+    } else if (target == GL_PIXEL_PACK_BUFFER) {
+        if (glstate->bind_buffer.pack == buffer) return;
+        glstate->bind_buffer.pack = buffer;
+        DBG(SHUT_LOGD("Bind buffer %d to GL_PIXEL_PACK_BUFFER\n", buffer);)
+        gles_glBindBuffer(target, buffer);
+    } else if (target == GL_PIXEL_UNPACK_BUFFER) {
+        if (glstate->bind_buffer.unpack == buffer) return;
+        glstate->bind_buffer.unpack = buffer;
+        DBG(SHUT_LOGD("Bind buffer %d to GL_PIXEL_UNPACK_BUFFER\n", buffer);)
+        gles_glBindBuffer(target, buffer);
     } else {
         LOGE("Warning, unhandled Buffer type %s in bindBuffer\n", PrintEnum(target));
         return;
@@ -960,6 +974,16 @@ void unboundBuffers() {
         glstate->bind_buffer.texture = 0;
         gles_glBindBuffer(GL_TEXTURE_BUFFER, 0);
         DBG(SHUT_LOGD("Bind buffer %d to GL_TEXTURE_BUFFER\n", 0);)
+    }
+    if (glstate->bind_buffer.pack) {
+        glstate->bind_buffer.pack = 0;
+        gles_glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        DBG(SHUT_LOGD("Bind buffer %d to GL_PIXEL_PACK_BUFFER\n", 0);)
+    }
+    if (glstate->bind_buffer.unpack) {
+        glstate->bind_buffer.unpack = 0;
+        gles_glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        DBG(SHUT_LOGD("Bind buffer %d to GL_PIXEL_UNPACK_BUFFER\n", 0);)
     }
     glstate->bind_buffer.used = 0;
 }
