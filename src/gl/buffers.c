@@ -705,7 +705,6 @@ void APIENTRY_GL4ES gl4es_glFlushMappedBufferRange(GLenum target, GLintptr offse
         return;
     }
 
-    // UBO FIX: Add GL_UNIFORM_BUFFER to the condition for flushing data.
     if (buff->real_buffer &&
         (target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER || target == GL_UNIFORM_BUFFER ||
          target == GL_COPY_WRITE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_TEXTURE_BUFFER) &&
@@ -737,47 +736,36 @@ void APIENTRY_GL4ES gl4es_glCopyBufferSubData(GLenum readTarget, GLenum writeTar
         return;
     }
 
-    if ((writebuff->ranged && !(writebuff->access & GL_MAP_PERSISTENT_BIT)) && readTarget != GL_COPY_READ_BUFFER) {
-        errorShim(GL_INVALID_OPERATION);
-        return;
-    }
+    LOAD_GLES3(glCopyBufferSubData);
+    if (!gles_glCopyBufferSubData) {
+        if (writebuff->real_buffer &&
+            (writebuff->type == GL_ARRAY_BUFFER || writebuff->type == GL_ELEMENT_ARRAY_BUFFER ||
+             writebuff->type == GL_UNIFORM_BUFFER || writebuff->type == GL_COPY_WRITE_BUFFER ||
+             writebuff->type == GL_COPY_READ_BUFFER || writebuff->type == GL_TEXTURE_BUFFER) &&
+            writebuff->mapped && (writebuff->access == GL_WRITE_ONLY || writebuff->access == GL_READ_WRITE)) {
+            LOAD_GLES(glBufferSubData);
+            bindBuffer(writebuff->type, writebuff->real_buffer);
+            gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
+        }
 
-    /*
-    if ((char*)readbuff->data + readOffset >= (char*)readbuff->data + readbuff->size ||
-        (char*)writebuff->data + writeOffset >= (char*)writebuff->data + writebuff->size ||
-        (readOffset + size > readbuff->size) ||
-        (writeOffset + size > writebuff->size)) {
-        errorShim(GL_INVALID_OPERATION);
-        return;
-    }
+        if (readTarget == GL_COPY_READ_BUFFER) {
+            DBG(SHUT_LOGD("GL_ARRAY_BUFFER data: %p\nGL_COPY_READ_BUFFER data: %p\n",
+                          getbuffer_buffer(GL_ARRAY_BUFFER)->data, readbuff->data);)
+            LOAD_GLES(glBufferSubData);
+            glstate->vao->write = writebuff;
+            bindBuffer(writebuff->type, writebuff->real_buffer);
+            gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
+        }
+    } else {
+        glstate->vao->read = readbuff;
+        bindBuffer(readTarget, readbuff->real_buffer);
+        glstate->vao->write = writebuff;
+        bindBuffer(writeTarget, writebuff->real_buffer);
 
-    if (readbuff == writebuff && readOffset + size > writeOffset) {
-        errorShim(GL_INVALID_OPERATION);
-        return;
+        gles_glCopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size);
     }
-     */
 
     memcpy((char*)writebuff->data + writeOffset, (char*)readbuff->data + readOffset, size);
-
-    // UBO FIX: Add GL_UNIFORM_BUFFER to the condition to update the destination buffer on the GPU.
-    if (writebuff->real_buffer &&
-        (writebuff->type == GL_ARRAY_BUFFER || writebuff->type == GL_ELEMENT_ARRAY_BUFFER ||
-         writebuff->type == GL_UNIFORM_BUFFER || writebuff->type == GL_COPY_WRITE_BUFFER ||
-         writebuff->type == GL_COPY_READ_BUFFER || writebuff->type == GL_TEXTURE_BUFFER) &&
-        writebuff->mapped && (writebuff->access == GL_WRITE_ONLY || writebuff->access == GL_READ_WRITE)) {
-        LOAD_GLES(glBufferSubData);
-        bindBuffer(writebuff->type, writebuff->real_buffer);
-        gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
-    }
-
-    if (readTarget == GL_COPY_READ_BUFFER) {
-        DBG(SHUT_LOGD("GL_ARRAY_BUFFER data: %p\nGL_COPY_READ_BUFFER data: %p\n",
-                      getbuffer_buffer(GL_ARRAY_BUFFER)->data, readbuff->data);)
-        LOAD_GLES(glBufferSubData);
-        glstate->vao->write = writebuff;
-        bindBuffer(writebuff->type, writebuff->real_buffer);
-        gles_glBufferSubData(writebuff->type, writeOffset, size, (char*)writebuff->data + writeOffset);
-    }
 
     noerrorShim();
 }

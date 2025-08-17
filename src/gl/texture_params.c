@@ -1,3 +1,4 @@
+#include "GLES3/gl32.h"
 #include "texture.h"
 
 #include "../glx/hardext.h"
@@ -305,6 +306,7 @@ void APIENTRY_GL4ES gl4es_glTexParameterfv(GLenum target, GLenum pname, const GL
     gltexture_t* texture = glstate->texture.bound[glstate->texture.active][itarget];
     LOAD_GLES(glTexParameterfv);
     realize_bound(glstate->texture.active, target);
+
     gles_glTexParameterfv(rtarget, pname, params);
     errorGL();
 
