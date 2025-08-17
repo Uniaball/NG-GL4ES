@@ -6,6 +6,8 @@ on:
 
 env:
   BUILD_TYPE: Release
+  ANDROID_NDK_VERSION: "27.3.13750724"
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
 jobs:
   build:
@@ -16,11 +18,33 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup Android NDK
-      uses: android-actions/setup-android-ndk@v2
-      with:
-        ndk-version: latest
-    
+    # 设置基本环境
+    - name: Setup environment
+      run: |
+        echo "ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}" >> $GITHUB_ENV
+        echo "${{ env.ANDROID_SDK_ROOT }}/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        sudo mkdir -p ${{ env.ANDROID_SDK_ROOT }}
+        sudo chmod -R 777 ${{ env.ANDROID_SDK_ROOT }}
+
+    # 安装Android命令行工具
+    - name: Install Android Command-line Tools
+      run: |
+        wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+        unzip -q commandlinetools-linux-*.zip -d ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools
+        mv ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools/cmdline-tools ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools/latest
+
+    # 使用sdkmanager安装NDK
+    - name: Install Android NDK with sdkmanager
+      run: |
+        yes | sdkmanager --verbose \
+          "ndk;${{ env.ANDROID_NDK_VERSION }}" \
+          > /dev/null
+      env:
+        ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+
+    - name: Set NDK root
+      run: echo "ANDROID_NDK_ROOT=${{ env.ANDROID_SDK_ROOT }}/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+
     - name: Configure CMake
       run: |
         cmake -B build \
