@@ -32,13 +32,13 @@ extern "C"
     {                                                                                                                  \
         int error;                                                                                                     \
         while ((error = glGetError())) {}                                                                              \
-        code if ((error = glGetError())) SHUT_LOGD(#code " -> %i\n", error);                                           \
+        code if ((error = glGetError())) DBG(SHUT_LOGD(#code " -> %i\n", error);)                                      \
     }
 
 #define printError(file, line)                                                                                         \
     {                                                                                                                  \
         int error;                                                                                                     \
-        if ((error = glGetError())) SHUT_LOGD(file ":%i -> %i\n", line, error);                                        \
+        if ((error = glGetError())) DBG(SHUT_LOGD(file ":%i -> %i\n", line, error);)                                   \
     }
 
 #define FLUSH_BEGINEND                                                                                                 \
@@ -103,7 +103,7 @@ extern "C"
                                                 GLsizei primcount);
     void APIENTRY_GL4ES gl4es_glMultiDrawElements(GLenum mode, GLsizei* count, GLenum type, const void* const* indices,
                                                   GLsizei primcount);
-    void APIENTRY_GL4ES gl4es_glMultiDrawElementsBaseVertex(GLenum mode, GLsizei* counts, GLenum type,
+    void APIENTRY_GL4ES gl4es_glMultiDrawElementsBaseVertex(GLenum mode, const GLsizei* counts, GLenum type,
                                                             const void* const* indices, GLsizei primcount,
                                                             const GLint* basevertex);
 

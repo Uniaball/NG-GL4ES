@@ -27,7 +27,6 @@ extern "C"
 #else
 #define DBG(a)
 #endif
-
     GLenum APIENTRY_GL4ES gl4es_glGetError(void) {
         DBG(SHUT_LOGD("glGetError(), noerror=%d, type_error=%d shim_error=%s\n", globals4es.noerror,
                       glstate->type_error, PrintEnum(glstate->shim_error));)
@@ -169,6 +168,18 @@ extern "C"
                    "GL_ARB_explicit_attrib_location "
                    //"GL_ARB_multi_bind "
                    "GL_ARB_indirect_parameters "
+                   "GL_ARB_draw_indirect "
+                   "GL_ARB_shader_texture_lod "
+                   "GL_ARB_uniform_buffer_object "
+                   "GL_ARB_copy_buffer "
+                   "GL_ARB_sync "
+                   "GL_ARB_fragment_coord_conventions "
+                   "GL_ARB_sampler_objects "
+                   "GL_ARB_texture_swizzle "
+                   "GL_ARB_compatibility "
+                   "GL_ARB_draw_buffers_blend "
+                   "GL_ARB_shader_image_load_store "
+                   "GL_EXT_shader_image_load_store "
                    //"GL_ARB_separate_shader_objects "
                    //                "GL_EXT_blend_logic_op "
             );
@@ -183,6 +194,7 @@ extern "C"
             if (hardext.blendsub) strcat(extensions, "GL_EXT_blend_subtract ");
             if (hardext.aniso) strcat(extensions, "GL_EXT_texture_filter_anisotropic ");
             if (hardext.mirrored) strcat(extensions, "GL_ARB_texture_mirrored_repeat ");
+            if (hardext.blend_func_extended) strcat(extensions, "GL_ARB_blend_func_extended ");
             if (hardext.fbo)
                 strcat(extensions, "GL_ARB_framebuffer_object "
                                    "GL_EXT_framebuffer_object "
@@ -315,6 +327,7 @@ extern "C"
         return gpuName;
     }
 
+    void init_internal_glDrawElementsBaseVertex();
     void set_es_version() {
         LOAD_GLES(glGetString);
         const char* ESVersion = getBeforeThirdSpace((const char*)gles_glGetString(GL_VERSION));
@@ -325,10 +338,16 @@ extern "C"
         } else {
             globals4es.esversion = globals4es.es * 100;
         }
+        init_internal_glDrawElementsBaseVertex();
         SHUT_LOGD("OpenGL ES Version: %s (%d)", ESVersion, globals4es.esversion);
         if (globals4es.esversion < 300) {
-            SHUT_LOGD("OpenGL ES version is lower than 3.0! This version is not supported!");
-            SHUT_LOGD("Disable glslang and SPIRV-Cross. Using vgpu to process all shaders!");
+            SHUT_LOGD("OpenGL ES version is lower than 3.0! This version is not supported completely!");
+            SHUT_LOGD("FBO and texture compression may be completely broken!");
+            SHUT_LOGD("Disabled glslang and SPIRV-Cross, using vgpu shaderconv to convert all shaders!");
+        } else if (globals4es.esversion < 310) {
+            SHUT_LOGD("OpenGL ES version is lower than 3.1! Rendering may be broken!");
+        } else if (globals4es.esversion < 320) {
+            SHUT_LOGD("OpenGL ES version is lower than 3.2! Some features may not work as expected!");
         }
     }
 
@@ -551,7 +570,7 @@ extern "C"
             *params = 1024;
             break;
         case GL_MAX_TEXTURE_IMAGE_UNITS:
-            *params = hardext.maxteximage;
+            *params = hardext.maxteximage * TEXTURE_IMAGE_MAGNIFICATION; // Cheating a bit
             break;
         case GL_MAX_MODELVIEW_STACK_DEPTH:
             *params = MAX_STACK_MODELVIEW;
@@ -894,7 +913,7 @@ extern "C"
             *params = globals4es.recyclefbo;
             break;
         case GL_MIPMAP_HINT_GL4ES:
-            *params = globals4es.automipmap;
+            *params = GL4ES_AUTOMIPMAP_PLACEHOLDER;
             break;
         case GL_TEXDUMP_HINT_GL4ES:
             *params = globals4es.texdump;
@@ -1021,6 +1040,12 @@ extern "C"
         case GL_CONTEXT_PROFILE_MASK:
             *params = GL_CONTEXT_COMPATIBILITY_PROFILE_BIT;
             break;
+        case GL_MAX_IMAGE_UNITS: {
+            int es_params = 16;
+            gles_glGetIntegerv(pname, &es_params);
+            *params = es_params * TEXTURE_IMAGE_MAGNIFICATION;
+            break;
+        }
         default:
             errorGL();
             gles_glGetIntegerv(pname, params);

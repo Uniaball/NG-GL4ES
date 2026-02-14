@@ -15,3 +15,4 @@ spec/yml/gles-1.1-full.yml
 .vs
 out
 CMakeSettings.json
+.cache

@@ -13,123 +13,132 @@
 #include <algorithm>
 #include <string>
 #include <sstream>
+#include "../../../version.h"
 
-//#define DEBUG
+extern "C"
+{
+#include <stdbool.h>
+#include "../logs.h"
+}
 
-std::string GLSLtoGLSLES(const char *glsl_code, GLenum glsl_type,
-                         unsigned int essl_version, unsigned int glsl_version,
-                         int &return_code);
-std::string GLSLtoGLSLES_2(const char *glsl_code, GLenum glsl_type,
-                           unsigned int essl_version, int &return_code);
+// #define DEBUG
+#ifdef DEBUG
+#define DBG(a) a
+#else
+#define DBG(a)
+#endif
+
+std::string GLSLtoGLSLES(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, unsigned int glsl_version,
+                         int& return_code);
+std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, int& return_code);
 
 const char* atomicCounterEmulatedWatermark = "// Non-opaque atomic uniform converted to SSBO";
 
-static TBuiltInResource InitResources()
-{
+static TBuiltInResource InitResources() {
     TBuiltInResource Resources{};
 
-    Resources.maxLights                                 = 32;
-    Resources.maxClipPlanes                             = 6;
-    Resources.maxTextureUnits                           = 32;
-    Resources.maxTextureCoords                          = 32;
-    Resources.maxVertexAttribs                          = 64;
-    Resources.maxVertexUniformComponents                = 4096;
-    Resources.maxVaryingFloats                          = 64;
-    Resources.maxVertexTextureImageUnits                = 32;
-    Resources.maxCombinedTextureImageUnits              = 80;
-    Resources.maxTextureImageUnits                      = 32;
-    Resources.maxFragmentUniformComponents              = 4096;
-    Resources.maxDrawBuffers                            = 32;
-    Resources.maxVertexUniformVectors                   = 128;
-    Resources.maxVaryingVectors                         = 8;
-    Resources.maxFragmentUniformVectors                 = 16;
-    Resources.maxVertexOutputVectors                    = 16;
-    Resources.maxFragmentInputVectors                   = 15;
-    Resources.minProgramTexelOffset                     = -8;
-    Resources.maxProgramTexelOffset                     = 7;
-    Resources.maxClipDistances                          = 8;
-    Resources.maxComputeWorkGroupCountX                 = 65535;
-    Resources.maxComputeWorkGroupCountY                 = 65535;
-    Resources.maxComputeWorkGroupCountZ                 = 65535;
-    Resources.maxComputeWorkGroupSizeX                  = 1024;
-    Resources.maxComputeWorkGroupSizeY                  = 1024;
-    Resources.maxComputeWorkGroupSizeZ                  = 64;
-    Resources.maxComputeUniformComponents               = 1024;
-    Resources.maxComputeTextureImageUnits               = 16;
-    Resources.maxComputeImageUniforms                   = 8;
-    Resources.maxComputeAtomicCounters                  = 8;
-    Resources.maxComputeAtomicCounterBuffers            = 1;
-    Resources.maxVaryingComponents                      = 60;
-    Resources.maxVertexOutputComponents                 = 64;
-    Resources.maxGeometryInputComponents                = 64;
-    Resources.maxGeometryOutputComponents               = 128;
-    Resources.maxFragmentInputComponents                = 128;
-    Resources.maxImageUnits                             = 8;
-    Resources.maxCombinedImageUnitsAndFragmentOutputs   = 8;
-    Resources.maxCombinedShaderOutputResources          = 8;
-    Resources.maxImageSamples                           = 0;
-    Resources.maxVertexImageUniforms                    = 0;
-    Resources.maxTessControlImageUniforms               = 0;
-    Resources.maxTessEvaluationImageUniforms            = 0;
-    Resources.maxGeometryImageUniforms                  = 0;
-    Resources.maxFragmentImageUniforms                  = 8;
-    Resources.maxCombinedImageUniforms                  = 8;
-    Resources.maxGeometryTextureImageUnits              = 16;
-    Resources.maxGeometryOutputVertices                 = 256;
-    Resources.maxGeometryTotalOutputComponents          = 1024;
-    Resources.maxGeometryUniformComponents              = 1024;
-    Resources.maxGeometryVaryingComponents              = 64;
-    Resources.maxTessControlInputComponents             = 128;
-    Resources.maxTessControlOutputComponents            = 128;
-    Resources.maxTessControlTextureImageUnits           = 16;
-    Resources.maxTessControlUniformComponents           = 1024;
-    Resources.maxTessControlTotalOutputComponents       = 4096;
-    Resources.maxTessEvaluationInputComponents          = 128;
-    Resources.maxTessEvaluationOutputComponents         = 128;
-    Resources.maxTessEvaluationTextureImageUnits        = 16;
-    Resources.maxTessEvaluationUniformComponents        = 1024;
-    Resources.maxTessPatchComponents                    = 120;
-    Resources.maxPatchVertices                          = 32;
-    Resources.maxTessGenLevel                           = 64;
-    Resources.maxViewports                              = 16;
-    Resources.maxVertexAtomicCounters                   = 0;
-    Resources.maxTessControlAtomicCounters              = 0;
-    Resources.maxTessEvaluationAtomicCounters           = 0;
-    Resources.maxGeometryAtomicCounters                 = 0;
-    Resources.maxFragmentAtomicCounters                 = 8;
-    Resources.maxCombinedAtomicCounters                 = 8;
-    Resources.maxAtomicCounterBindings                  = 1;
-    Resources.maxVertexAtomicCounterBuffers             = 0;
-    Resources.maxTessControlAtomicCounterBuffers        = 0;
-    Resources.maxTessEvaluationAtomicCounterBuffers     = 0;
-    Resources.maxGeometryAtomicCounterBuffers           = 0;
-    Resources.maxFragmentAtomicCounterBuffers           = 1;
-    Resources.maxCombinedAtomicCounterBuffers           = 1;
-    Resources.maxAtomicCounterBufferSize                = 16384;
-    Resources.maxTransformFeedbackBuffers               = 4;
+    Resources.maxLights = 32;
+    Resources.maxClipPlanes = 6;
+    Resources.maxTextureUnits = 32;
+    Resources.maxTextureCoords = 32;
+    Resources.maxVertexAttribs = 64;
+    Resources.maxVertexUniformComponents = 4096;
+    Resources.maxVaryingFloats = 64;
+    Resources.maxVertexTextureImageUnits = 32;
+    Resources.maxCombinedTextureImageUnits = 80;
+    Resources.maxTextureImageUnits = 32;
+    Resources.maxFragmentUniformComponents = 4096;
+    Resources.maxDrawBuffers = 32;
+    Resources.maxVertexUniformVectors = 128;
+    Resources.maxVaryingVectors = 8;
+    Resources.maxFragmentUniformVectors = 16;
+    Resources.maxVertexOutputVectors = 16;
+    Resources.maxFragmentInputVectors = 15;
+    Resources.minProgramTexelOffset = -8;
+    Resources.maxProgramTexelOffset = 7;
+    Resources.maxClipDistances = 8;
+    Resources.maxComputeWorkGroupCountX = 65535;
+    Resources.maxComputeWorkGroupCountY = 65535;
+    Resources.maxComputeWorkGroupCountZ = 65535;
+    Resources.maxComputeWorkGroupSizeX = 1024;
+    Resources.maxComputeWorkGroupSizeY = 1024;
+    Resources.maxComputeWorkGroupSizeZ = 64;
+    Resources.maxComputeUniformComponents = 1024;
+    Resources.maxComputeTextureImageUnits = 16;
+    Resources.maxComputeImageUniforms = 8;
+    Resources.maxComputeAtomicCounters = 8;
+    Resources.maxComputeAtomicCounterBuffers = 1;
+    Resources.maxVaryingComponents = 60;
+    Resources.maxVertexOutputComponents = 64;
+    Resources.maxGeometryInputComponents = 64;
+    Resources.maxGeometryOutputComponents = 128;
+    Resources.maxFragmentInputComponents = 128;
+    Resources.maxImageUnits = 8;
+    Resources.maxCombinedImageUnitsAndFragmentOutputs = 8;
+    Resources.maxCombinedShaderOutputResources = 8;
+    Resources.maxImageSamples = 0;
+    Resources.maxVertexImageUniforms = 0;
+    Resources.maxTessControlImageUniforms = 0;
+    Resources.maxTessEvaluationImageUniforms = 0;
+    Resources.maxGeometryImageUniforms = 0;
+    Resources.maxFragmentImageUniforms = 8;
+    Resources.maxCombinedImageUniforms = 8;
+    Resources.maxGeometryTextureImageUnits = 16;
+    Resources.maxGeometryOutputVertices = 256;
+    Resources.maxGeometryTotalOutputComponents = 1024;
+    Resources.maxGeometryUniformComponents = 1024;
+    Resources.maxGeometryVaryingComponents = 64;
+    Resources.maxTessControlInputComponents = 128;
+    Resources.maxTessControlOutputComponents = 128;
+    Resources.maxTessControlTextureImageUnits = 16;
+    Resources.maxTessControlUniformComponents = 1024;
+    Resources.maxTessControlTotalOutputComponents = 4096;
+    Resources.maxTessEvaluationInputComponents = 128;
+    Resources.maxTessEvaluationOutputComponents = 128;
+    Resources.maxTessEvaluationTextureImageUnits = 16;
+    Resources.maxTessEvaluationUniformComponents = 1024;
+    Resources.maxTessPatchComponents = 120;
+    Resources.maxPatchVertices = 32;
+    Resources.maxTessGenLevel = 64;
+    Resources.maxViewports = 16;
+    Resources.maxVertexAtomicCounters = 0;
+    Resources.maxTessControlAtomicCounters = 0;
+    Resources.maxTessEvaluationAtomicCounters = 0;
+    Resources.maxGeometryAtomicCounters = 0;
+    Resources.maxFragmentAtomicCounters = 8;
+    Resources.maxCombinedAtomicCounters = 8;
+    Resources.maxAtomicCounterBindings = 1;
+    Resources.maxVertexAtomicCounterBuffers = 0;
+    Resources.maxTessControlAtomicCounterBuffers = 0;
+    Resources.maxTessEvaluationAtomicCounterBuffers = 0;
+    Resources.maxGeometryAtomicCounterBuffers = 0;
+    Resources.maxFragmentAtomicCounterBuffers = 1;
+    Resources.maxCombinedAtomicCounterBuffers = 1;
+    Resources.maxAtomicCounterBufferSize = 16384;
+    Resources.maxTransformFeedbackBuffers = 4;
     Resources.maxTransformFeedbackInterleavedComponents = 64;
-    Resources.maxCullDistances                          = 8;
-    Resources.maxCombinedClipAndCullDistances           = 8;
-    Resources.maxSamples                                = 4;
-    Resources.maxMeshOutputVerticesNV                   = 256;
-    Resources.maxMeshOutputPrimitivesNV                 = 512;
-    Resources.maxMeshWorkGroupSizeX_NV                  = 32;
-    Resources.maxMeshWorkGroupSizeY_NV                  = 1;
-    Resources.maxMeshWorkGroupSizeZ_NV                  = 1;
-    Resources.maxTaskWorkGroupSizeX_NV                  = 32;
-    Resources.maxTaskWorkGroupSizeY_NV                  = 1;
-    Resources.maxTaskWorkGroupSizeZ_NV                  = 1;
-    Resources.maxMeshViewCountNV                        = 4;
+    Resources.maxCullDistances = 8;
+    Resources.maxCombinedClipAndCullDistances = 8;
+    Resources.maxSamples = 4;
+    Resources.maxMeshOutputVerticesNV = 256;
+    Resources.maxMeshOutputPrimitivesNV = 512;
+    Resources.maxMeshWorkGroupSizeX_NV = 32;
+    Resources.maxMeshWorkGroupSizeY_NV = 1;
+    Resources.maxMeshWorkGroupSizeZ_NV = 1;
+    Resources.maxTaskWorkGroupSizeX_NV = 32;
+    Resources.maxTaskWorkGroupSizeY_NV = 1;
+    Resources.maxTaskWorkGroupSizeZ_NV = 1;
+    Resources.maxMeshViewCountNV = 4;
 
-    Resources.limits.nonInductiveForLoops                 = true;
-    Resources.limits.whileLoops                           = true;
-    Resources.limits.doWhileLoops                         = true;
-    Resources.limits.generalUniformIndexing               = true;
+    Resources.limits.nonInductiveForLoops = true;
+    Resources.limits.whileLoops = true;
+    Resources.limits.doWhileLoops = true;
+    Resources.limits.generalUniformIndexing = true;
     Resources.limits.generalAttributeMatrixVectorIndexing = true;
-    Resources.limits.generalVaryingIndexing               = true;
-    Resources.limits.generalSamplerIndexing               = true;
-    Resources.limits.generalVariableIndexing              = true;
-    Resources.limits.generalConstantMatrixVectorIndexing  = true;
+    Resources.limits.generalVaryingIndexing = true;
+    Resources.limits.generalSamplerIndexing = true;
+    Resources.limits.generalVariableIndexing = true;
+    Resources.limits.generalConstantMatrixVectorIndexing = true;
 
     return Resources;
 }
@@ -146,10 +155,10 @@ int getGLSLVersion(const char* glsl_code) {
 }
 
 std::string forceSupporterOutput(const std::string& glslCode) {
-    bool hasPrecisionFloat = glslCode.find("precision ") != std::string::npos &&
-                             glslCode.find("float;") != std::string::npos;
-    bool hasPrecisionInt = glslCode.find("precision ") != std::string::npos &&
-                           glslCode.find("int;") != std::string::npos;
+    bool hasPrecisionFloat =
+        glslCode.find("precision ") != std::string::npos && glslCode.find("float;") != std::string::npos;
+    bool hasPrecisionInt =
+        glslCode.find("precision ") != std::string::npos && glslCode.find("int;") != std::string::npos;
 
     std::string result = glslCode;
     std::string precisionFloat;
@@ -211,12 +220,8 @@ std::string removeLayoutBinding(const std::string& glslCode) {
 }
 
 void trim(std::string& str) {
-    str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](int ch) {
-        return !std::isspace(ch);
-    }));
-    str.erase(std::find_if(str.rbegin(), str.rend(), [](int ch) {
-        return !std::isspace(ch);
-    }).base(), str.end());
+    str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](int ch) { return !std::isspace(ch); }));
+    str.erase(std::find_if(str.rbegin(), str.rend(), [](int ch) { return !std::isspace(ch); }).base(), str.end());
 }
 
 // Process all uniform declarations into `uniform <precision> <type> <name>;` form
@@ -236,17 +241,15 @@ std::string process_uniform_declarations(const std::string& glslCode) {
             }
 
             const size_t decl_start = scan_pos;
-            scan_pos += 7;  // Skip "uniform"
+            scan_pos += 7; // Skip "uniform"
 
-            // 解析精度限定符和类型
             std::string precision, type;
             bool found_precision = false;
 
-            // 第一轮解析：类型前的精度限定符
             while (scan_pos < length) {
-                while (scan_pos < length && std::isspace(glslCode[scan_pos])) ++scan_pos;
+                while (scan_pos < length && std::isspace(glslCode[scan_pos]))
+                    ++scan_pos;
 
-                // 检查精度限定符
                 for (const auto& kw : precision_kws) {
                     if (glslCode.compare(scan_pos, kw.length(), kw) == 0) {
                         precision = " " + kw;
@@ -257,7 +260,6 @@ std::string process_uniform_declarations(const std::string& glslCode) {
                 }
                 if (found_precision) break;
 
-                // 开始提取类型
                 const size_t type_start = scan_pos;
                 while (scan_pos < length && (std::isalnum(glslCode[scan_pos]) || glslCode[scan_pos] == '_')) {
                     ++scan_pos;
@@ -266,9 +268,9 @@ std::string process_uniform_declarations(const std::string& glslCode) {
                 break;
             }
 
-            // 第二轮解析：类型后的精度限定符
             while (scan_pos < length) {
-                while (scan_pos < length && std::isspace(glslCode[scan_pos])) ++scan_pos;
+                while (scan_pos < length && std::isspace(glslCode[scan_pos]))
+                    ++scan_pos;
 
                 bool found = false;
                 for (const auto& kw : precision_kws) {
@@ -282,7 +284,6 @@ std::string process_uniform_declarations(const std::string& glslCode) {
                 if (!found) break;
             }
 
-            // 确保类型被正确提取
             if (type.empty()) {
                 const size_t type_start = scan_pos;
                 while (scan_pos < length && (std::isalnum(glslCode[scan_pos]) || glslCode[scan_pos] == '_')) {
@@ -291,29 +292,24 @@ std::string process_uniform_declarations(const std::string& glslCode) {
                 type = glslCode.substr(type_start, scan_pos - type_start);
             }
 
-            // 提取变量名
-            while (scan_pos < length && std::isspace(glslCode[scan_pos])) ++scan_pos;
+            while (scan_pos < length && std::isspace(glslCode[scan_pos]))
+                ++scan_pos;
             const size_t name_start = scan_pos;
             while (scan_pos < length && (std::isalnum(glslCode[scan_pos]) || glslCode[scan_pos] == '_')) {
                 ++scan_pos;
             }
             const std::string name = glslCode.substr(name_start, scan_pos - name_start);
 
-            // 定位声明结束
             size_t decl_end = glslCode.find(';', scan_pos);
-            if (decl_end == std::string::npos) decl_end = length;
-            else ++decl_end;
+            if (decl_end == std::string::npos)
+                decl_end = length;
+            else
+                ++decl_end;
 
-            // 处理初始化值
             const bool has_initializer = (glslCode.find('=', scan_pos) < decl_end);
             if (has_initializer) {
-                result.append("uniform")
-                        .append(precision)
-                        .append(" ")
-                        .append(type)
-                        .append(" ")
-                        .append(name)
-                        .append(";");
+                result.append("uniform").append(precision).append(" ").append(type).append(" ").append(name).append(
+                    ";");
             } else {
                 result.append(glslCode, decl_start, decl_end - decl_start);
             }
@@ -341,7 +337,8 @@ bool checkIfAtomicCounterBufferEmulated(const std::string& glslCode) {
     return glslCode.find(atomicCounterEmulatedWatermark) != std::string::npos;
 }
 
-char* GLSLtoGLSLES_c(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, unsigned int glsl_version, int* return_code)  {
+char* GLSLtoGLSLES_c(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, unsigned int glsl_version,
+                     int* return_code) {
     int tmp_return_code = 0;
     std::string result = GLSLtoGLSLES(glsl_code, glsl_type, essl_version, glsl_version, tmp_return_code);
     *return_code = tmp_return_code;
@@ -355,14 +352,16 @@ char* GLSLtoGLSLES_c(const char* glsl_code, GLenum glsl_type, unsigned int essl_
     return cstr;
 }
 
-std::string GLSLtoGLSLES(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, unsigned int glsl_version, int& return_code) {
+std::string GLSLtoGLSLES(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, unsigned int glsl_version,
+                         int& return_code) {
     return_code = -1;
     std::string converted = GLSLtoGLSLES_2(glsl_code, glsl_type, essl_version, return_code);
 
     return (return_code >= 0) ? converted : glsl_code;
 }
 
-std::string replace_line_starting_with(const std::string& glslCode, const std::string& starting, const std::string& substitution = "") {
+std::string replace_line_starting_with(const std::string& glslCode, const std::string& starting,
+                                       const std::string& substitution = "") {
     std::string result;
     size_t length = glslCode.size();
     size_t start = 0;
@@ -397,8 +396,7 @@ std::string replace_line_starting_with(const std::string& glslCode, const std::s
         if (current < length) {
             if (glslCode[current] == '\r') {
                 newlineLength = (current + 1 < length && glslCode[current + 1] == '\n') ? 2 : 1;
-            }
-            else {
+            } else {
                 newlineLength = 1;
             }
         }
@@ -412,8 +410,7 @@ std::string replace_line_starting_with(const std::string& glslCode, const std::s
             start = current; // 3. Starting from next line
 
             result += substitution;
-        }
-        else {
+        } else {
             // move to a new line
             current += newlineLength;
         }
@@ -426,7 +423,7 @@ std::string replace_line_starting_with(const std::string& glslCode, const std::s
 
 static inline void replace_all(std::string& str, const std::string& from, const std::string& to) {
     size_t start_pos = 0;
-    while((start_pos = str.find(from, start_pos)) != std::string::npos) {
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
         str.replace(start_pos, from.length(), to);
         start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
     }
@@ -441,14 +438,12 @@ static size_t find_insertion_point(const std::string& glsl) {
         size_t version_end = glsl.find('\n', version_pos);
         if (version_end == std::string::npos) {
             version_end = glsl.length();
-        }
-        else {
+        } else {
             version_end++;
         }
         insertion_point = version_end;
         pos = version_end;
-    }
-    else {
+    } else {
         insertion_point = 0;
         pos = 0;
     }
@@ -492,8 +487,7 @@ bool process_non_opaque_atomic_to_ssbo(std::string& source) {
     std::map<std::string, std::string> binding_map;
     std::regex decl_rx(
         R"(layout\s*\(\s*binding\s*=\s*(\d+)\s*(?:,\s*offset\s*=\s*(\d+)\s*)?\)\s*uniform\s+atomic_uint\s+(\w+)\s*;)",
-        std::regex::icase
-    );
+        std::regex::icase);
 
     std::smatch m;
     auto it = source.cbegin();
@@ -507,10 +501,12 @@ bool process_non_opaque_atomic_to_ssbo(std::string& source) {
         atomic_vars.insert(var);
         binding_map[var] = binding;
 
-        std::string repl =
-            "layout(std430, binding=" + binding + ") buffer AtomicCounterSSBO_" + binding + " {\n"
-            "    uint " + var + ";\n"
-            "};\n";
+        std::string repl = "layout(std430, binding=" + binding + ") buffer AtomicCounterSSBO_" + binding +
+                           " {\n"
+                           "    uint " +
+                           var +
+                           ";\n"
+                           "};\n";
         source.replace(match_pos, match_len, repl);
 
         it = source.cbegin() + match_pos + repl.size();
@@ -519,37 +515,29 @@ bool process_non_opaque_atomic_to_ssbo(std::string& source) {
     if (atomic_vars.empty()) return true;
 
     for (auto& var : atomic_vars) {
-        source = std::regex_replace(source,
-            std::regex(R"(\batomicCounterIncrement\s*\(\s*)" + var + R"(\s*\))", std::regex::icase),
-            "atomicAdd(" + var + ", 1u)"
-        );
-        source = std::regex_replace(source,
-            std::regex(R"(\batomicCounterDecrement\s*\(\s*)" + var + R"(\s*\))", std::regex::icase),
-            "atomicAdd(" + var + ", uint(-1))"
-        );
-        source = std::regex_replace(source,
-            std::regex(R"(\batomicCounterAdd\s*\(\s*)" + var + R"(\s*,\s*([^)]+)\s*\))", std::regex::icase),
-            "atomicAdd(" + var + ", $1)"
-        );
-        source = std::regex_replace(source,
-            std::regex(R"(\batomicCounter\s*\(\s*)" + var + R"(\s*\))", std::regex::icase),
-            var
-        );
+        source = std::regex_replace(
+            source, std::regex(R"(\batomicCounterIncrement\s*\(\s*)" + var + R"(\s*\))", std::regex::icase),
+            "atomicAdd(" + var + ", 1u)");
+        source = std::regex_replace(
+            source, std::regex(R"(\batomicCounterDecrement\s*\(\s*)" + var + R"(\s*\))", std::regex::icase),
+            "atomicAdd(" + var + ", uint(-1))");
+        source = std::regex_replace(
+            source, std::regex(R"(\batomicCounterAdd\s*\(\s*)" + var + R"(\s*,\s*([^)]+)\s*\))", std::regex::icase),
+            "atomicAdd(" + var + ", $1)");
+        source = std::regex_replace(
+            source, std::regex(R"(\batomicCounter\s*\(\s*)" + var + R"(\s*\))", std::regex::icase), var);
     }
 
-	// insert memoryBarrierBuffer
+    // insert memoryBarrierBuffer
     {
-        std::regex rx_barrier(
-            R"(([ \t]*\batomicAdd\b[^;]*;))",
-            std::regex::icase
-        );
+        std::regex rx_barrier(R"(([ \t]*\batomicAdd\b[^;]*;))", std::regex::icase);
 
         std::set<size_t> processed_positions;
         std::string result;
         size_t last_pos = 0;
 
-        for (auto it = std::sregex_iterator(source.begin(), source.end(), rx_barrier);
-            it != std::sregex_iterator(); ++it) {
+        for (auto it = std::sregex_iterator(source.begin(), source.end(), rx_barrier); it != std::sregex_iterator();
+             ++it) {
 
             size_t start_pos = it->position();
             size_t end_pos = start_pos + it->length();
@@ -589,11 +577,8 @@ void process_sampler_buffer(std::string& source) { // a simplized version, shoul
     }
 
     std::regex pattern(R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^)]+?)\s*\))");
-    source = std::regex_replace(
-        source,
-        pattern,
-        "texelFetch($1, ivec2(($2) % u_BufferTexWidth, ($2) / u_BufferTexWidth), 0)"
-    );
+    source = std::regex_replace(source, pattern,
+                                "texelFetch($1, ivec2(($2) % u_BufferTexWidth, ($2) / u_BufferTexWidth), 0)");
 
     const char* boundaryProtection = R"(
 ivec2 bufferCoords(int index) {
@@ -608,11 +593,8 @@ ivec2 bufferCoords(int index) {
 }
 )";
 
-    source = std::regex_replace(
-        source,
-        std::regex("texelFetch\\((\\w+)\\s*,\\s*ivec2\\(([^)]+)\\)\\s*,\\s*0\\)"),
-        "texelFetch($1, bufferCoords($2), 0)"
-    );
+    source = std::regex_replace(source, std::regex("texelFetch\\((\\w+)\\s*,\\s*ivec2\\(([^)]+)\\)\\s*,\\s*0\\)"),
+                                "texelFetch($1, bufferCoords($2), 0)");
 
     size_t insertion_point = find_insertion_point(source);
     if (insertion_point != std::string::npos) {
@@ -670,7 +652,9 @@ static inline void inject_temporal_filter(std::string& glsl) {
         return;
     }
 
-    const std::regex uniformRegex(R"(^\s*(?:layout\s*\([^)]*\)\s*)?uniform\s+\w+(?:\s*\[\s*\d+\s*\])?\s+\w+(?:\s*\[\s*\d+\s*\])?\s*;.*$)", std::regex::ECMAScript | std::regex::multiline);
+    const std::regex uniformRegex(
+        R"(^\s*(?:layout\s*\([^)]*\)\s*)?uniform\s+\w+(?:\s*\[\s*\d+\s*\])?\s+\w+(?:\s*\[\s*\d+\s*\])?\s*;.*$)",
+        std::regex::ECMAScript | std::regex::multiline);
     std::sregex_iterator it(glsl.begin(), glsl.end(), uniformRegex);
     std::sregex_iterator end;
     size_t insertPos = 0;
@@ -707,10 +691,9 @@ vec4 GI_TemporalFilter() {
 #define xstr(s) str(s)
 #define str(s) #s
 
-void inject_mg_macro_definition(std::string& glslCode) {
-    std::string macro_definitions =
-            "\n#define MG_MOBILEGLUES\n"
-            "#define MG_MOBILEGLUES_VERSION " xstr(MAJOR) xstr(MINOR) xstr(REVISION) xstr(PATCH) "\n";
+void inject_ngg_macro_definition(std::string& glslCode) {
+    std::string macro_definitions = "\n#define NGG_NGG\n"
+                                    "#define NGG_NGG_VERSION " xstr(MAJOR) xstr(MINOR) xstr(REVISION) "\n";
 
     size_t versionPos = glslCode.rfind("#version");
     size_t insertionPos = 0;
@@ -735,9 +718,9 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
     replace_all(ret, "#ifndef GL_ARB_derivative_control", "#if 1");
 
     // Polyfill transpose()
-    replace_all(ret,
-                "const mat3 rotInverse = transpose(rot);",
-                "const mat3 rotInverse = mat3(rot[0][0], rot[1][0], rot[2][0], rot[0][1], rot[1][1], rot[2][1], rot[0][2], rot[1][2], rot[2][2]);");
+    replace_all(ret, "const mat3 rotInverse = transpose(rot);",
+                "const mat3 rotInverse = mat3(rot[0][0], rot[1][0], rot[2][0], rot[0][1], rot[1][1], rot[2][1], "
+                "rot[0][2], rot[1][2], rot[2][2]);");
 
     // GI_TemporalFilter injection
     inject_temporal_filter(ret);
@@ -747,8 +730,7 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
         inject_textureQueryLod(ret);
     }
 
-    // MobileGlues macros injection
-    inject_mg_macro_definition(ret);
+    inject_ngg_macro_definition(ret);
 
     if (/*hardware->emulate_texture_buffer*/ 0) {
         // Sampler buffer processing
@@ -769,31 +751,32 @@ int get_or_add_glsl_version(std::string& glsl) {
     return glsl_version;
 }
 
-std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, const char * const *shader_src, int& errc) {
+std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, const char* const* shader_src,
+                                        int& errc) {
     EShLanguage shader_language;
     switch (shader_type) {
-        case GL_VERTEX_SHADER:
-            shader_language = EShLanguage::EShLangVertex;
-            break;
-        case GL_FRAGMENT_SHADER:
-            shader_language = EShLanguage::EShLangFragment;
-            break;
-        case GL_COMPUTE_SHADER:
-            shader_language = EShLanguage::EShLangCompute;
-            break;
-        case GL_TESS_CONTROL_SHADER:
-            shader_language = EShLanguage::EShLangTessControl;
-            break;
-        case GL_TESS_EVALUATION_SHADER:
-            shader_language = EShLanguage::EShLangTessEvaluation;
-            break;
-        case GL_GEOMETRY_SHADER:
-            shader_language = EShLanguage::EShLangGeometry;
-            break;
-        default:
-            // LOGD("GLSL type not supported!")
-            errc = -1;
-            return {};
+    case GL_VERTEX_SHADER:
+        shader_language = EShLanguage::EShLangVertex;
+        break;
+    case GL_FRAGMENT_SHADER:
+        shader_language = EShLanguage::EShLangFragment;
+        break;
+    case GL_COMPUTE_SHADER:
+        shader_language = EShLanguage::EShLangCompute;
+        break;
+    case GL_TESS_CONTROL_SHADER:
+        shader_language = EShLanguage::EShLangTessControl;
+        break;
+    case GL_TESS_EVALUATION_SHADER:
+        shader_language = EShLanguage::EShLangTessEvaluation;
+        break;
+    case GL_GEOMETRY_SHADER:
+        shader_language = EShLanguage::EShLangGeometry;
+        break;
+    default:
+        // LOGD("GLSL type not supported!")
+        errc = -1;
+        return {};
     }
 
     glslang::TShader shader(shader_language);
@@ -802,28 +785,28 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     using namespace glslang;
     shader.setEnvInput(EShSourceGlsl, shader_language, EShClientVulkan, glsl_version);
     shader.setEnvClient(EShClientOpenGL, EShTargetOpenGL_450);
-    shader.setEnvTarget(EShTargetSpv, EShTargetSpv_1_6);
+    shader.setEnvTarget(EShTargetSpv, EShTargetSpv_1_5);
     shader.setAutoMapLocations(true);
     shader.setAutoMapBindings(true);
 
     TBuiltInResource TBuiltInResource_resources = InitResources();
 
     if (!shader.parse(&TBuiltInResource_resources, glsl_version, true, EShMsgDefault)) {
-        // LOGD("GLSL Compiling ERROR: \n%s",shader.getInfoLog())
+        DBG(SHUT_LOGD("glslang: GLSL Compiling ERROR: \n%s", shader.getInfoLog());)
         errc = -1;
         return {};
     }
-    // LOGD("GLSL Compiled.")
+    DBG(SHUT_LOGD("GLSL Compiled to SPIRV.");)
 
     glslang::TProgram program;
     program.addShader(&shader);
 
     if (!program.link(EShMsgDefault)) {
-        // LOGD("Shader Linking ERROR: %s", program.getInfoLog())
+        DBG(SHUT_LOGD("glslang: GLSL Linking ERROR: \n%s", program.getInfoLog());)
         errc = -1;
         return {};
     }
-    // LOGD("Shader Linked." )
+    DBG(SHUT_LOGD("GLSL Linked.");)
     std::vector<unsigned int> spirv_code;
     glslang::SpvOptions spvOptions;
     spvOptions.disableOptimizer = false;
@@ -838,27 +821,28 @@ std::string spirv_to_essl(std::vector<unsigned int> spirv, unsigned int essl_ver
     spvc_compiler compiler_glsl = nullptr;
     spvc_compiler_options options = nullptr;
     spvc_resources resources = nullptr;
-    const spvc_reflected_resource *list = nullptr;
-    const char *result = nullptr;
-    size_t count;
+    //    const spvc_reflected_resource* list = nullptr;
+    const char* result = nullptr;
+    //    size_t count;
 
-    const SpvId *p_spirv = spirv.data();
+    const SpvId* p_spirv = spirv.data();
     size_t word_count = spirv.size();
 
-    // LOGD("spirv_code.size(): %d", spirv.size())
+    DBG(SHUT_LOGD("spirv_code.size(): %d", spirv.size()))
     spvc_context_create(&context);
     spvc_context_parse_spirv(context, p_spirv, word_count, &ir);
     spvc_context_create_compiler(context, SPVC_BACKEND_GLSL, ir, SPVC_CAPTURE_MODE_TAKE_OWNERSHIP, &compiler_glsl);
     spvc_compiler_create_shader_resources(compiler_glsl, &resources);
-    spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, &list, &count);
+    //    spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, &list, &count);
     spvc_compiler_create_compiler_options(compiler_glsl, &options);
-    spvc_compiler_options_set_uint(options, SPVC_COMPILER_OPTION_GLSL_VERSION, essl_version >= 300 ? essl_version : 300);
+    spvc_compiler_options_set_uint(options, SPVC_COMPILER_OPTION_GLSL_VERSION,
+                                   essl_version >= 300 ? essl_version : 300);
     spvc_compiler_options_set_bool(options, SPVC_COMPILER_OPTION_GLSL_ES, SPVC_TRUE);
     spvc_compiler_install_compiler_options(compiler_glsl, options);
     spvc_compiler_compile(compiler_glsl, &result);
 
     if (!result) {
-        printf("Error: unexpected error in spirv-cross.");
+        DBG(SHUT_LOGD("Error: unexpected error in spirv-cross."));
         errc = -1;
         return "";
     }
@@ -872,21 +856,22 @@ std::string spirv_to_essl(std::vector<unsigned int> spirv, unsigned int essl_ver
 }
 
 static bool glslang_inited = false;
-std::string GLSLtoGLSLES_2(const char *glsl_code, GLenum glsl_type, unsigned int essl_version, int& return_code) {
-	bool atomicCounterEmulated = false;
+std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, int& return_code) {
+    bool atomicCounterEmulated = false;
     std::string correct_glsl_str = preprocess_glsl(glsl_code, glsl_type, &atomicCounterEmulated);
-    // LOGD("Firstly converted GLSL:\n%s", correct_glsl_str.c_str())
+    DBG(SHUT_LOGD("Firstly converted GLSL:\n%s", correct_glsl_str.c_str()))
     int glsl_version = get_or_add_glsl_version(correct_glsl_str);
 
     if (!glslang_inited) {
         glslang::InitializeProcess();
         glslang_inited = true;
     }
-    const char* s[] = { correct_glsl_str.c_str() };
+    const char* s[] = {correct_glsl_str.c_str()};
     int errc = 0;
     std::vector<unsigned int> spirv_code = glsl_to_spirv(glsl_type, glsl_version, s, errc);
     if (errc != 0) {
         return_code = -1;
+        DBG(SHUT_LOGD("Error compiling GLSL to SPIR-V: %d", errc))
         return "";
     }
     errc = 0;
@@ -904,7 +889,7 @@ std::string GLSLtoGLSLES_2(const char *glsl_code, GLenum glsl_type, unsigned int
     essl = processOutColorLocations(essl);
     essl = forceSupporterOutput(essl);
 
-    // LOGD("Originally GLSL to GLSL ES Complete: \n%s", essl.c_str())
+    DBG(SHUT_LOGD("Originally GLSL to GLSL ES Complete: \n%s", essl.c_str()))
     return_code = errc;
     if (return_code == 0) {
         return_code = atomicCounterEmulated ? 1 : 0;
