@@ -16,3 +16,4 @@ spec/yml/gles-1.1-full.yml
 out
 CMakeSettings.json
 .cache
+.trae
