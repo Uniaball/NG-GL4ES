@@ -839,6 +839,8 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
     bool has_sampler_buffer = (result.find("samplerBuffer") != std::string::npos);
 
     if (has_sampler_buffer) {
+        DBG(SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: found samplerBuffer types, converting to sampler2D\n");)
+
         // Replace usamplerBuffer → usampler2D, isamplerBuffer → isampler2D, samplerBuffer → sampler2D
         size_t pos = 0;
         while ((pos = result.find("usamplerBuffer", pos)) != std::string::npos) {
@@ -883,19 +885,16 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
         // Comment: this is aggressive but fixes the common spirv-cross issue.
         // We only do this for non-uniform declarations (in/out variables), not uniforms.
         // Uniforms with uint types are preserved.
-        std::string tmp;
-        bool modified = false;
         size_t i = 0;
-        size_t len = result.length();
+        int uvec_replaced = 0;
 
-        while (i < len) {
+        while (i < result.length()) {
             // Skip lines that are uniform declarations
             bool is_uniform = false;
             size_t line_start = i;
             while (line_start > 0 && result[line_start - 1] != '\n') line_start--;
             if (strncmp(&result[line_start], "uniform", 7) == 0 ||
                 strncmp(&result[line_start], "layout", 6) == 0) {
-                // Check if this line contains "uniform"
                 const char* line_ptr = &result[line_start];
                 const char* semi = strchr(line_ptr, ';');
                 if (semi && strncmp(line_ptr, "uniform", 7) == 0) {
@@ -904,16 +903,17 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
             }
 
             if (!is_uniform) {
-                // Check for uvec3/uvec4 at this position
-                if ((i + 5 <= len && result.compare(i, 5, "uvec3") == 0) ||
-                    (i + 5 <= len && result.compare(i, 5, "uvec4") == 0)) {
-                    // Replace "uvec3" → "vec3", "uvec4" → "vec4"
+                size_t cur_len = result.length();
+                if (i + 5 <= cur_len && (result.compare(i, 5, "uvec3") == 0 ||
+                                          result.compare(i, 5, "uvec4") == 0)) {
                     result.replace(i, 5, std::string("vec") + result[i + 4]);
-                    modified = true;
+                    uvec_replaced++;
                 }
             }
             i++;
         }
+        if (uvec_replaced > 0)
+            DBG(SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);)
     }
 
     return result;
@@ -962,9 +962,15 @@ std::string spirv_to_essl(std::vector<unsigned int> spirv, unsigned int essl_ver
 static bool glslang_inited = false;
 std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, int& return_code) {
     bool atomicCounterEmulated = false;
+    const char* shader_type_name = (glsl_type == GL_VERTEX_SHADER) ? "VS" :
+                                    (glsl_type == GL_FRAGMENT_SHADER) ? "FS" : "OTHER";
+    bool has_sbuf = (strstr(glsl_code, "samplerBuffer") != NULL);
+    DBG(SHUT_LOGD("[glsl-for-es] GLSLtoGLSLES_2 entry: type=%s src_len=%zu has_samplerBuffer=%d\n",
+                   shader_type_name, strlen(glsl_code), has_sbuf);)
+
     std::string correct_glsl_str = preprocess_glsl(glsl_code, glsl_type, &atomicCounterEmulated);
-    DBG(SHUT_LOGD("Firstly converted GLSL:\n%s", correct_glsl_str.c_str()))
     int glsl_version = get_or_add_glsl_version(correct_glsl_str);
+    DBG(SHUT_LOGD("[glsl-for-es] glsl_version=%d essl_target=%d\n", glsl_version, essl_version);)
 
     if (!glslang_inited) {
         glslang::InitializeProcess();
@@ -975,13 +981,16 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     std::vector<unsigned int> spirv_code = glsl_to_spirv(glsl_type, glsl_version, s, errc);
     if (errc != 0) {
         return_code = -1;
-        DBG(SHUT_LOGD("Error compiling GLSL to SPIR-V: %d", errc))
+        DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc))
+        return "";
         return "";
     }
+    DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size());)
     errc = 0;
     std::string essl = spirv_to_essl(spirv_code, essl_version, errc);
     if (errc != 0) {
         return_code = -2;
+        DBG(SHUT_LOGD("[glsl-for-es] spirv_to_essl FAILED: errc=%d\n", errc);)
         return "";
     }
 

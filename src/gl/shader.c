@@ -845,11 +845,14 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     free(convertedSource);
                     // Use SPIRV result only if conversion succeeded; fall back to FPE path otherwise
                     if (result != NULL && returnCode >= 0) {
+                        DBG(SHUT_LOGD("[shader] SPIRV path OK (returnCode=%d), using GLSL→ESSL converted source\n", returnCode);)
                         glshader->converted =
                             strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
                                                                  &glshader->uniforms_declarations_count));
                         free(result);
                     } else {
+                        DBG(SHUT_LOGD("[shader] SPIRV path FAILED (result=%p returnCode=%d), falling back to FPE path\n",
+                                       (void*)result, returnCode);)
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
                     }
@@ -863,11 +866,14 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     char* result = GLSLtoGLSLES_c(glshader->source, glshader->type, globals4es.esversion, glsl_version,
                                                   &returnCode);
                     if (result != NULL && returnCode >= 0) {
+                        DBG(SHUT_LOGD("[shader] SPIRV path(bare) OK (returnCode=%d)\n", returnCode);)
                         glshader->converted =
                             strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
                                                                  &glshader->uniforms_declarations_count));
                         free(result);
                     } else {
+                        DBG(SHUT_LOGD("[shader] SPIRV path(bare) FAILED (result=%p returnCode=%d), fallback FPE\n",
+                                       (void*)result, returnCode);)
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
                     }
