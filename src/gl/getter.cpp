@@ -375,13 +375,13 @@ extern "C"
                 if (use_mc_color == 1) {
                     version_builder << " §a"
 #if RELEASE == 1
-                                    << "Krypton Wrapper §b"
+                                    << "Krypton Wrapper-U §b"
 #else
-                                    << "Krypton Wrapper §d"
+                                    << "Krypton Wrapper-U §d"
 #endif
                                     << VERSION_TYPE;
                 } else {
-                    version_builder << " Krypton Wrapper " << VERSION_TYPE;
+                    version_builder << " Krypton Wrapper-U " << VERSION_TYPE;
                 }
 
                 version_builder << MAJOR << "." << MINOR << "." << REVISION << VERSION_SUFFIX;
