@@ -165,7 +165,8 @@ else()
 endif()
 
 if(ANDROID)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNOX11")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNOX11 -DDEBUG")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDEBUG")
 endif()
 
 set(C_SRC_FILES
