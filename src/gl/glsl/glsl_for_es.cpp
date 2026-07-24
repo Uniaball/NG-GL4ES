@@ -750,27 +750,6 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
 
     inject_ngg_macro_definition(ret);
 
-    // Disable Vulkan-specific #ifdef VULKAN blocks before passing to glslang.
-    // Some Minecraft shaders have:
-    //   #ifdef VULKAN
-    //   layout(push_constant) uniform PC { vec3 u_Foo; ... };
-    //   #else
-    //   uniform vec3 u_Foo; ...
-    //   #endif
-    // The VULKAN branch uses push_constant (Vulkan-only, glslang rejects for
-    // OpenGL) and makes members accessible without the PC. block-name prefix.
-    // Simply replacing push_constant with std140 creates a named uniform block
-    // whose members require PC.u_Foo access — but the shader body uses u_Foo
-    // directly (line 2253: "u_RegionOffset + ...").
-    //
-    // Correct fix: force the #else branch by replacing #ifdef VULKAN with
-    // #if 0. The #else branch uses standard OpenGL individual uniform
-    // declarations which match the shader body's direct access pattern.
-    {
-        static const std::regex vulkan_ifdef_re(R"(#ifdef\s+VULKAN)");
-        ret = std::regex_replace(ret, vulkan_ifdef_re, "#if 0 // VULKAN");
-    }
-
     // Convert samplerBuffer types to sampler2D BEFORE glslang/SPIRV compilation.
     // glslang rejects samplerBuffer without GL_EXT_texture_buffer, but sampler2D
     // is always valid. We also rewrite texelFetch() from 1D to 2D coords so
@@ -867,6 +846,7 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     shader.setEnvTarget(EShTargetSpv, EShTargetSpv_1_5);
     shader.setAutoMapLocations(true);
     shader.setAutoMapBindings(true);
+    shader.setPreamble("#undef VULKAN\n"); // Disable VULKAN macro so #ifdef VULKAN blocks use #else branch
 
     TBuiltInResource TBuiltInResource_resources = InitResources();
 
