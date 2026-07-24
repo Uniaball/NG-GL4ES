@@ -799,10 +799,13 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
 int get_or_add_glsl_version(std::string& glsl) {
     int glsl_version = getGLSLVersion(glsl.c_str());
     if (glsl_version == -1) {
-        glsl_version = 140;
-        glsl.insert(0, "#version 140\n");
+        glsl_version = 150;
+        glsl.insert(0, "#version 150\n");
+    } else if (glsl_version < 140) {
+        // Bump old versions to 150 compatibility so glslang sees modern syntax
+        glsl = replace_line_starting_with(glsl, "#version", "#version 150 compatibility\n");
+        glsl_version = 150;
     }
-    // LOGD("GLSL version: %d",glsl_version)
     return glsl_version;
 }
 
@@ -913,20 +916,19 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
             std::regex::ECMAScript);
         result = std::regex_replace(result, texel_fetch_regex,
                                      "texelFetch($1, ivec2($2, 0), 0)");
+    }
 
-    // Fix uvec→vec type mismatches from spirv-cross output, but ONLY for
-    // samplerBuffer shaders. spirv-cross sometimes produces uvec3*float etc.
-    // when converting SPIRV from samplerBuffer-based shaders to ESSL.
-    // Non-samplerBuffer shaders (MC 1.21.1 Sodium, etc.) need uvec preserved
-    // for bitwise ops (&, |, ^, <<, >>) — converting to vec would break them.
+    // Fix uvec→vec type mismatches from spirv-cross output.
+    // spirv-cross sometimes produces uvec3/uvec4 in ESSL that get used with
+    // float operations (e.g. uvec3 * float), which causes compile errors on
+    // mobile GPU drivers (e.g. "no operation '*' exists that takes a
+    // left-hand operand of type '3-component vector of uint' and a right
+    // operand of type 'const float'" on Adreno).
+    //
+    // This runs for ALL shaders, not just samplerBuffer ones.
+    // We skip uniform declarations and layout-qualified lines to preserve
+    // uint types where they're structurally needed.
     {
-        // Simple fix: replace all "uvec3 " with "vec3 " and "uvec4 " with "vec4 "
-        // Since most shaders don't intentionally use uvec for rendering, this is usually safe.
-        // For cases where uint is genuinely needed, the conversion adds explicit casts.
-
-        // Comment: this is aggressive but fixes the common spirv-cross issue.
-        // We only do this for non-uniform declarations (in/out variables), not uniforms.
-        // Uniforms with uint types are preserved.
         size_t i = 0;
         int uvec_replaced = 0;
 
@@ -957,7 +959,6 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
         if (uvec_replaced > 0) {
             SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);
         }
-    }
     }
 
     return result;

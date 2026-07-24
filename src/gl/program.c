@@ -1101,14 +1101,37 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                             out_decl = out_str;
                                         }
                                     }
-                                    // Append to vertex shader converted source
-                                    // Defensive: skip if this exact declaration (or variable name)
-                                    // already exists — the out-search above may miss formatting variants.
+                                    // Append to vertex shader converted source.
+                                    // Defensive: skip if the vertex shader already declares this
+                                    // varying as an output. We check two things:
+                                    //   1. Exact form: "out vec4 Color;" (from the FS in-decl)
+                                    //   2. Any "out" line containing the variable name (handles
+                                    //      precision variants like "out highp vec4 Color;").
+                                    // We do NOT skip just because the name appears — it must be an
+                                    // "out" declaration. A bare " Color;" match could be a vertex
+                                    // attribute like "in vec4 Color;" (in vivo → inout collision).
                                     {
-                                        char name_check[256];
-                                        snprintf(name_check, sizeof(name_check), " %s;", vname);
-                                        if (strstr(glprogram->last_vert->converted, out_decl) ||
-                                            strstr(glprogram->last_vert->converted, name_check)) {
+                                        const char* vert_src = glprogram->last_vert->converted;
+                                        int skip_patch = 0;
+                                        // Check 1: exact form from FS in-decl
+                                        if (strstr(vert_src, out_decl)) {
+                                            skip_patch = 1;
+                                        }
+                                        // Check 2: variable name exists AND the line is an "out" line
+                                        if (!skip_patch) {
+                                            char name_check[256];
+                                            snprintf(name_check, sizeof(name_check), " %s;", vname);
+                                            const char* match = strstr(vert_src, name_check);
+                                            if (match) {
+                                                const char* line_start = match;
+                                                while (line_start > vert_src &&
+                                                       *(line_start - 1) != '\n') line_start--;
+                                                if (strstr(line_start, "out ")) {
+                                                    skip_patch = 1;
+                                                }
+                                            }
+                                        }
+                                        if (skip_patch) {
                                             SHUT_LOGD("[program] Skipping duplicate varying patch: %s\n", out_decl);
                                             free(out_decl);
                                             continue;
