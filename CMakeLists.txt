@@ -2,20 +2,124 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ng_gl4es)
 
-#if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+# ============================================================
+#  Optimization options
+# ============================================================
+
+if (DEFINED ENV{USE_EXTRA_OPTIMIZATIONS})
+    set(USE_EXTRA_OPTIMIZATIONS "$ENV{USE_EXTRA_OPTIMIZATIONS}" CACHE STRING "Enable extra performance optimizations" FORCE)
+endif()
+if (NOT USE_EXTRA_OPTIMIZATIONS)
+    set(USE_EXTRA_OPTIMIZATIONS "OFF")
+endif()
+
+if (USE_EXTRA_OPTIMIZATIONS STREQUAL "ON" OR USE_EXTRA_OPTIMIZATIONS STREQUAL "TRUE" OR USE_EXTRA_OPTIMIZATIONS STREQUAL "1")
+    set(USE_EXTRA_OPTIMIZATIONS_ENABLED TRUE)
+else()
+    set(USE_EXTRA_OPTIMIZATIONS_ENABLED FALSE)
+endif()
+
+if (DEFINED ENV{LTO_FLAG})
+    set(LTO_FLAG "$ENV{LTO_FLAG}" CACHE STRING "LTO flag (e.g., -flto or -flto=thin)" FORCE)
+endif()
+
+# ============================================================
+#  Base optimization flags (non-Debug only)
+# ============================================================
+
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     include(CheckIPOSupported)
     check_ipo_supported(RESULT LTOSupported OUTPUT LTOError)
     if (LTOSupported)
         set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
     endif()
 
-    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        add_compile_options(-g0 -O3 -ffunction-sections -fdata-sections)
+    if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT CMAKE_C_COMPILER_ID MATCHES "AppleClang")
+        add_compile_options(-O3 -ffunction-sections -fdata-sections)
         add_link_options(-Wl,--gc-sections)
-    elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    elseif (CMAKE_C_COMPILER_ID MATCHES "MSVC")
         add_compile_options(/O2 /GL)
     endif()
-#endif()
+endif()
+
+# ============================================================
+#  EXTRA OPTIMIZATIONS (GNU|Clang, non-Apple, non-Debug)
+# ============================================================
+
+if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT CMAKE_C_COMPILER_ID MATCHES "AppleClang")
+    if (USE_EXTRA_OPTIMIZATIONS_ENABLED AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        message(STATUS "")
+        message(STATUS "============================================================")
+        message(STATUS "  EXTRA OPTIMIZATIONS ENABLED")
+        message(STATUS "============================================================")
+        message(STATUS "  Compile flags:")
+        message(STATUS "    -fomit-frame-pointer           : omit frame pointer")
+        message(STATUS "    -fno-semantic-interposition     : allow more aggressive optimizations")
+        message(STATUS "    -fmerge-all-constants          : merge identical constants")
+        message(STATUS "    -fno-math-errno                : skip errno for math functions")
+        message(STATUS "    -fno-signed-zeros              : ignore sign of zero")
+        message(STATUS "    -fno-trapping-math             : skip FP exception trapping")
+        message(STATUS "    -fno-unwind-tables             : omit unwind tables")
+        message(STATUS "    -fno-asynchronous-unwind-tables : omit async unwind tables")
+        message(STATUS "    -fstrict-aliasing              : enable strict aliasing")
+        message(STATUS "    -fno-rtti                      : disable RTTI (CXX only)")
+        message(STATUS "    -D_NDK_MATH_NO_SOFT=1         : force hardware FP (Android)")
+        message(STATUS "    -ffast-math                    : aggressive FP optimizations")
+        message(STATUS "")
+        message(STATUS "  Link flags:")
+        message(STATUS "    -Wl,--as-needed                : link only used libraries")
+        message(STATUS "    -Wl,--icf=all                  : merge identical code sections")
+        message(STATUS "    -Wl,--hash-style=gnu           : GNU hash style")
+        message(STATUS "    -Wl,-Bsymbolic                 : prefer local symbols")
+        message(STATUS "    -Wl,--exclude-libs,ALL         : hide static lib symbols")
+        if (LTO_FLAG)
+            message(STATUS "    ${LTO_FLAG}                    : LTO")
+        else()
+            message(STATUS "    LTO                            : Disabled")
+        endif()
+        message(STATUS "============================================================")
+        message(STATUS "")
+
+        add_compile_options(
+            -fomit-frame-pointer
+            -fno-semantic-interposition
+            -fmerge-all-constants
+            -fno-math-errno
+            -fno-signed-zeros
+            -fno-trapping-math
+            -fno-unwind-tables
+            -fno-asynchronous-unwind-tables
+            -fstrict-aliasing
+            $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+            -D_NDK_MATH_NO_SOFT=1
+            -ffast-math
+        )
+        add_link_options(
+            -Wl,--as-needed
+            -Wl,--icf=all
+            -Wl,--hash-style=gnu
+            -Wl,-Bsymbolic
+            -Wl,--exclude-libs,ALL
+        )
+
+        # LTO
+        if (LTO_FLAG)
+            message(STATUS "LTO: ${LTO_FLAG}")
+            add_compile_options(${LTO_FLAG})
+            add_link_options(${LTO_FLAG})
+        endif()
+
+    else()
+        message(STATUS "")
+        message(STATUS "============================================================")
+        message(STATUS "  EXTRA OPTIMIZATIONS DISABLED")
+        message(STATUS "============================================================")
+        message(STATUS "  USE_EXTRA_OPTIMIZATIONS = ${USE_EXTRA_OPTIMIZATIONS}")
+        message(STATUS "  CMAKE_BUILD_TYPE        = ${CMAKE_BUILD_TYPE}")
+        message(STATUS "============================================================")
+        message(STATUS "")
+    endif()
+endif()
 
 # glslang & SPIRV-Cross
 
@@ -46,11 +150,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -DNO_GBM -DDEFAULT_ES=3 -fvisibility=hidden")
+# Platform-specific C/CXX flags
+if(MACOS)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fvisibility=default -funwind-tables -g -D_THREAD_SAFE -fPIC -stdlib=libc++")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -g -std=gnu11 -funwind-tables -fPIC -fvisibility=hidden -DNO_GBM -DDEFAULT_ES=3")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -fvisibility=hidden -funwind-tables -g -D_THREAD_SAFE -fPIC")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -g -std=gnu11 -funwind-tables -fPIC -fvisibility=hidden -DNO_GBM -DDEFAULT_ES=3")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
+endif()
 
 if(ANDROID)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNOX11")
