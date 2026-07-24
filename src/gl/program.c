@@ -867,6 +867,120 @@ void APIENTRY_GL4ES gl4es_glProgramBinary(GLuint program, GLenum binaryFormat, c
         errorShim(GL_INVALID_OPERATION);
 }
 
+// Retry link by force-adding missing varyings from FS to VS.
+// Called when the initial link fails with "not declared in output from
+// previous stage". Unlike the pre-link varying check, this doesn't check
+// for duplicates — it always adds the missing out declarations.
+static int retry_link_with_varying_patch(glprogram_t* glprogram) {
+    if (!glprogram->last_frag || !glprogram->last_vert) return 0;
+    if (!glprogram->last_frag->converted || !glprogram->last_vert->converted) return 0;
+
+    const char* fs_src = glprogram->last_frag->converted;
+    int needs_recompile = 0;
+    char* new_vs = strdup(glprogram->last_vert->converted);
+    if (!new_vs) return 0;
+
+    // Scan FS for "in ...;" declarations and add matching "out" to VS
+    const char* scan = fs_src;
+    while (*scan) {
+        // Skip to next "in " keyword
+        const char* in_ptr = strstr(scan, "\nin ");
+        if (!in_ptr) in_ptr = strstr(scan, ";in ");
+        if (!in_ptr) {
+            if (scan == fs_src && strncmp(scan, "in ", 3) == 0) {
+                in_ptr = scan;
+            } else {
+                break;
+            }
+        } else {
+            in_ptr += (in_ptr[0] == '\n') ? 1 : 1; // skip \n or ;
+            // Verify it's really "in " at position
+            if (strncmp(in_ptr, "in ", 3) != 0) {
+                scan = in_ptr + 1;
+                continue;
+            }
+        }
+
+        // Extract the full declaration
+        const char* semi = strchr(in_ptr, ';');
+        if (!semi) break;
+        size_t decl_len = semi - in_ptr + 1;
+
+        // Build "out" version
+        char* out_decl = (char*)malloc(decl_len + 10);
+        if (!out_decl) { free(new_vs); return 0; }
+        strncpy(out_decl, in_ptr, decl_len);
+        out_decl[decl_len] = '\0';
+
+        // Replace "in " with "out "
+        char* in_kw = strstr(out_decl, "in ");
+        if (in_kw) {
+            size_t prefix = in_kw - out_decl;
+            memmove(in_kw + 1, in_kw, 3); // shift "in " right by 1
+            in_kw[0] = 'o'; in_kw[1] = 'u'; in_kw[2] = 't'; in_kw[3] = ' ';
+        }
+
+        // Always add — don't check for duplicates in retry path
+        size_t vs_len = strlen(new_vs);
+        char* vs2 = (char*)realloc(new_vs, vs_len + strlen(out_decl) + 3);
+        if (!vs2) { free(out_decl); free(new_vs); return 0; }
+        new_vs = vs2;
+        if (vs_len > 0 && new_vs[vs_len - 1] != '\n') {
+            strcat(new_vs, "\n");
+        }
+        strcat(new_vs, out_decl);
+        strcat(new_vs, "\n");
+        needs_recompile = 1;
+        SHUT_LOGD("[program] Retry: patched vertex shader with: %s\n", out_decl);
+        free(out_decl);
+
+        scan = semi + 1;
+    }
+
+    if (!needs_recompile) {
+        free(new_vs);
+        return 0;
+    }
+
+    // Recompile VS
+    LOAD_GLES2(glShaderSource);
+    LOAD_GLES2(glCompileShader);
+    LOAD_GLES2(glGetShaderiv);
+    if (gles_glShaderSource && gles_glCompileShader) {
+        const char* patched_src = new_vs;
+        gles_glShaderSource(glprogram->last_vert->id, 1, &patched_src, NULL);
+        gles_glCompileShader(glprogram->last_vert->id);
+        GLint compiled = 0;
+        gles_glGetShaderiv(glprogram->last_vert->id, GL_COMPILE_STATUS, &compiled);
+        if (!compiled) {
+            SHUT_LOGD("[program] Retry: VS recompile failed\n");
+            free(new_vs);
+            return 0;
+        }
+        // Update converted source
+        free(glprogram->last_vert->converted);
+        glprogram->last_vert->converted = new_vs;
+    } else {
+        free(new_vs);
+        return 0;
+    }
+
+    // Re-link
+    LOAD_GLES2(glLinkProgram);
+    if (gles_glLinkProgram) {
+        gles_glLinkProgram(glprogram->id);
+        GLint linked = 0;
+        LOAD_GLES2(glGetProgramiv);
+        gles_glGetProgramiv(glprogram->id, GL_LINK_STATUS, &linked);
+        if (linked) {
+            SHUT_LOGD("[program] Retry link succeeded\n");
+            return 1;
+        }
+        SHUT_LOGD("[program] Retry link still failed\n");
+    }
+    return 0;
+}
+
 void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
     DBG(SHUT_LOGD("glLinkProgram(%d)\n", program))
     FLUSH_BEGINEND;
@@ -1113,15 +1227,6 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                     {
                                         const char* vert_src = glprogram->last_vert->converted;
                                         int skip_patch = 0;
-
-                                        // If VS and FS went through DIFFERENT conversion paths
-                                        // (one SPIRV/is_converted_essl_320=1, other FPE/=0),
-                                        // source-level varying name matching is unreliable.
-                                        // SPIRV-cross and FPE use different internal naming
-                                        // conventions. Always force-add the varying patch.
-                                        int mixed_paths = (glprogram->last_vert->is_converted_essl_320
-                                                        != glprogram->last_frag->is_converted_essl_320);
-                                        if (!mixed_paths) {
                                         // Check 1: exact form from FS in-decl
                                         if (strstr(vert_src, out_decl)) {
                                             skip_patch = 1;
@@ -1145,7 +1250,6 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                             free(out_decl);
                                             continue;
                                         }
-                                        } // if (!mixed_paths)
                                     }
                                     size_t vs_orig_len = strlen(glprogram->last_vert->converted);
                                     size_t out_decl_len = strlen(out_decl);
@@ -1225,6 +1329,20 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                 GLchar log_chars[log_length];
                 gles_glGetProgramInfoLog(glprogram->id, log_length, &log_length, log_chars);
                 DBG(SHUT_LOGD("%s", log_chars));
+                // If link failed because a varying is "not declared in output
+                // from previous stage", retry: find the missing varying in the
+                // FS, patch it into the VS, recompile VS, and re-link.
+                if (glprogram->last_frag && glprogram->last_vert &&
+                    strstr(log_chars, "not declared in output from previous stage")) {
+                    SHUT_LOGD("[program] Link failed with varying mismatch, retrying with force-patch\n");
+                    if (retry_link_with_varying_patch(glprogram)) {
+                        glprogram->linked = 1;
+                    } else {
+                        glprogram->linked = 0;
+                        errorShim(err);
+                    }
+                    return;
+                }
             }
             // should DBG the linker error?
             DBG(SHUT_LOGD(" Link failled!\n"))
