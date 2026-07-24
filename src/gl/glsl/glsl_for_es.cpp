@@ -160,22 +160,24 @@ std::string forceSupporterOutput(const std::string& glslCode) {
     bool hasPrecisionInt =
         glslCode.find("precision ") != std::string::npos && glslCode.find("int;") != std::string::npos;
 
-    std::string result = glslCode;
+    std::string result;
+    result.reserve(glslCode.size() + 64);
     std::string precisionFloat;
     std::string precisionInt;
 
     if (hasPrecisionFloat && hasPrecisionInt) {
-        std::istringstream iss(result);
+        // Both precision lines exist. Strip them out and re-insert at the correct
+        // position (after the last #extension) so the output is clean and ordered.
+        std::istringstream iss(glslCode);
         std::vector<std::string> lines;
         std::string line;
         while (std::getline(iss, line)) {
             bool isPrecisionLine = (line.find("precision ") != std::string::npos) &&
                                    (line.find("float;") != std::string::npos || line.find("int;") != std::string::npos);
             if (!isPrecisionLine) {
-                lines.push_back(line);
+                lines.push_back(std::move(line));
             }
         }
-        result.clear();
         for (size_t i = 0; i < lines.size(); ++i) {
             if (i != 0) result += '\n';
             result += lines[i];
@@ -183,10 +185,14 @@ std::string forceSupporterOutput(const std::string& glslCode) {
         precisionFloat = "precision highp float;\n";
         precisionInt = "precision highp int;\n";
     } else {
+        result = glslCode;
         precisionFloat = hasPrecisionFloat ? "" : "precision highp float;\n";
         precisionInt = hasPrecisionInt ? "" : "precision highp int;\n";
     }
 
+    // Insert precision statements after the last #extension line (so they come
+    // after extension declarations but before the rest of the shader code).
+    // If there are no #extensions, insert after the #version line.
     size_t lastExtensionPos = result.rfind("#extension");
     size_t insertionPos = 0;
 
