@@ -399,12 +399,13 @@ extern "C"
             BuildExtensionsList();
             return glstate->extensions;
         case GL_VENDOR:
-            return (GLubyte*)"ptitSeb & BZLZHH";
+            return (GLubyte*)"ptitSeb & BZLZHH & Uniaball";
         case GL_RENDERER: {
             if (rendererString == std::string("")) {
                 const char* gpuName = getGpuName();
                 const char* glesName = getGLESName();
-                rendererString = std::string(gpuName) + " | " + std::string(glesName);
+                rendererString = std::string(gpuName) + " | " + std::string(glesName) +
+                                 " | Krypton Wrapper-U (based on Krypton Wrapper 0.4.5)";
             }
             return (const GLubyte*)rendererString.c_str();
         }
