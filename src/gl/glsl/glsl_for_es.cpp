@@ -750,48 +750,6 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
 
     inject_ngg_macro_definition(ret);
 
-    // Convert samplerBuffer types to sampler2D BEFORE glslang/SPIRV compilation.
-    // glslang rejects samplerBuffer without GL_EXT_texture_buffer, but sampler2D
-    // is always valid. We also rewrite texelFetch() from 1D to 2D coords so
-    // glslang sees valid sampler2D call syntax (texelFetch(sampler2D, int) is
-    // invalid — it needs ivec2 and a LOD parameter).
-    {
-        int converted = 0;
-        size_t pos = 0;
-        while ((pos = ret.find("usamplerBuffer", pos)) != std::string::npos) {
-            ret.replace(pos, 14, "usampler2D");
-            pos += 10;
-            converted = 1;
-        }
-        pos = 0;
-        while ((pos = ret.find("isamplerBuffer", pos)) != std::string::npos) {
-            ret.replace(pos, 14, "isampler2D");
-            pos += 10;
-            converted = 1;
-        }
-        pos = 0;
-        while ((pos = ret.find("samplerBuffer", pos)) != std::string::npos) {
-            if (pos > 0 && (ret[pos - 1] == 'u' || ret[pos - 1] == 'i')) {
-                pos += 13;
-                continue;
-            }
-            ret.replace(pos, 13, "sampler2D");
-            pos += 9;
-            converted = 1;
-        }
-        if (converted) {
-            // Rewrite texelFetch(sampler, int) and texelFetch(sampler, int, 0)
-            // → texelFetch(sampler, ivec2(int, 0), 0) so glslang accepts it.
-            // The optional (, 0) handles buffer-texture-style calls that already
-            // supply a LOD parameter (valid in GLSL ≥ 400 for samplerBuffer).
-            static const std::regex texel_fetch_pre_rx(
-                R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*(?:,\s*0\s*)?\s*\))",
-                std::regex::ECMAScript);
-            ret = std::regex_replace(ret, texel_fetch_pre_rx,
-                                      "texelFetch($1, ivec2($2, 0), 0)");
-        }
-    }
-
     *atomicCounterEmulated = process_non_opaque_atomic_to_ssbo(ret);
     return ret;
 }
@@ -1046,9 +1004,6 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     }
     essl = processOutColorLocations(essl);
     essl = forceSupporterOutput(essl);
-
-    // Fix samplerBuffer types and uvec/float type mismatches from spirv-cross output
-    essl = emulate_sampler_buffers_and_fix_types(essl, glsl_type);
 
     DBG(SHUT_LOGD("Originally GLSL to GLSL ES Complete: \n%s", essl.c_str()))
     return_code = errc;
