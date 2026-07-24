@@ -335,6 +335,10 @@ char* process_uniform_declarations(char* glslCode, uniforms_declarations uniform
 char* ConvertShaderConditionally(struct shader_s* shader_source) {
     int shaderCompileStatus;
 
+    SHUT_LOGD("[shaderconv] ConvertShaderConditionally: type=%s vgpu_backport=%d glsl300es=%d\n",
+              shader_source->type == GL_VERTEX_SHADER ? "VS" : "FS",
+              globals4es.vgpu_backport, hardext.glsl300es);
+
     // First, vanilla gl4es, no forward port
     shader_source->converted =
         ConvertShader(shader_source->source, shader_source->type == GL_VERTEX_SHADER ? 1 : 0, &shader_source->need, 0);
@@ -350,6 +354,7 @@ char* ConvertShaderConditionally(struct shader_s* shader_source) {
 
     // At last resort, use forward porting
     if (!shaderCompileStatus && hardext.glsl300es) {
+        SHUT_LOGD("[shaderconv] ConvertShaderConditionally: forward port with CoerceIntToFloat (previous compile FAILED)\n");
         shader_source->converted = ConvertShader(shader_source->source, shader_source->type == GL_VERTEX_SHADER ? 1 : 0,
                                                  &shader_source->need, 1);
         shader_source->converted = ConvertShaderVgpu(shader_source);
@@ -917,12 +922,20 @@ char* CoerceIntToFloat(char* source, int* sourceLength) {
     // Attempt and loop unrolling -> worked well, time to fix my shit I guess
     source = ReplaceVariableName(source, sourceLength, "int", "float");
     source = WrapFunction(source, sourceLength, "int", "float", "\n ");
-    source = ReplaceVariableName(source, sourceLength, "uint", "float");
-    source = WrapFunction(source, sourceLength, "uint", "float", "\n ");
+    // If the shader uses uvec types, it needs unsigned integer semantics
+    // (e.g. bitwise ops like &, |, ^, <<, >>). Converting uvec->vec would
+    // break those operations. Skip uint/uvec conversions in that case.
+    int has_uvec = (strstr(source, "uvec") != NULL);
+    if (!has_uvec) {
+        source = ReplaceVariableName(source, sourceLength, "uint", "float");
+        source = WrapFunction(source, sourceLength, "uint", "float", "\n ");
+    }
 
     // TODO Yes I could just do the same as above but I'm lazy at times
     source = InplaceReplaceSimple(source, sourceLength, "ivec", "vec");
-    source = InplaceReplaceSimple(source, sourceLength, "uvec", "vec");
+    if (!has_uvec) {
+        source = InplaceReplaceSimple(source, sourceLength, "uvec", "vec");
+    }
 
     source = InplaceReplaceSimple(source, sourceLength, "isampleBuffer", "sampleBuffer");
     source = InplaceReplaceSimple(source, sourceLength, "usampleBuffer", "sampleBuffer");

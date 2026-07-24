@@ -405,9 +405,9 @@ const char* const* fpe_VertexShader(shaderconv_need_t* need, fpe_state_t* state)
         }
         if (is_default && need) {
             ShadAppend("vec4 Color;\n");
-            if (twosided) ShadAppend("vec4 BackColor\n");
-            if (secondary) ShadAppend("vec4 SecColor\n;");
-            if (secondary && twosided) ShadAppend("vec4 SecBackColor\n");
+            if (twosided) ShadAppend("vec4 BackColor;\n");
+            if (secondary) ShadAppend("vec4 SecColor;\n");
+            if (secondary && twosided) ShadAppend("vec4 SecBackColor;\n");
         }
         // material emission
         char fm_emission[60], fm_ambient[60], fm_diffuse[60], fm_specular[60];
