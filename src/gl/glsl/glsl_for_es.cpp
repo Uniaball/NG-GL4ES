@@ -967,7 +967,7 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
                                     (glsl_type == GL_FRAGMENT_SHADER) ? "FS" : "OTHER";
     bool has_sbuf = (strstr(glsl_code, "samplerBuffer") != NULL);
     SHUT_LOGD("[glsl-for-es] GLSLtoGLSLES_2 entry: type=%s src_len=%zu has_samplerBuffer=%d\n",
-                   shader_type_name, strlen(glsl_code), has_sbuf);)
+                   shader_type_name, strlen(glsl_code), has_sbuf);
 
     std::string correct_glsl_str = preprocess_glsl(glsl_code, glsl_type, &atomicCounterEmulated);
     int glsl_version = get_or_add_glsl_version(correct_glsl_str);

@@ -852,7 +852,7 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                         free(result);
                     } else {
                         SHUT_LOGD("[shader] SPIRV path FAILED (result=%p returnCode=%d), falling back to FPE path\n",
-                                       (void*)result, returnCode);)
+                                       (void*)result, returnCode);
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
                     }
@@ -873,7 +873,7 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                         free(result);
                     } else {
                         SHUT_LOGD("[shader] SPIRV path(bare) FAILED (result=%p returnCode=%d), fallback FPE\n",
-                                       (void*)result, returnCode);)
+                                       (void*)result, returnCode);
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
                     }
