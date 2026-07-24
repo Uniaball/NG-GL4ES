@@ -18,6 +18,14 @@
 #define DBG(a)
 #endif
 
+// Ensure CPU-side scratch index buffer has enough capacity
+#define ENSURE_SCRATCH_INDICES_CPU(cnt) do { \
+    if (glstate->scratch_indices_cpu_cap < (cnt)) { \
+        glstate->scratch_indices_cpu = (GLushort*)realloc(glstate->scratch_indices_cpu, (cnt) * sizeof(GLushort)); \
+        glstate->scratch_indices_cpu_cap = (cnt); \
+    } \
+} while(0)
+
 static GLboolean is_cache_compatible(GLsizei count) {
 #define T2(AA, A, B)                                                                                                   \
     if (glstate->vao->AA != glstate->vao->B.enabled) return GL_FALSE;                                                  \
@@ -514,9 +522,15 @@ void APIENTRY_GL4ES gl4es_glDrawRangeElements(GLenum mode, GLuint start, GLuint 
     bool need_free =
         !((type == GL_UNSIGNED_SHORT) || (!compiling && !intercept && type == GL_UNSIGNED_INT && hardext.elementuint));
     if (need_free) {
+        void* dst = NULL;
+        if (!compiling && !intercept) {
+            ENSURE_SCRATCH_INDICES_CPU(count);
+            dst = glstate->scratch_indices_cpu;
+            need_free = false;  // scratch is reused, not malloc'd; skip free later
+        }
         sindices = copy_gl_array(
             (glstate->vao->elements) ? (void*)((char*)glstate->vao->elements->data + (uintptr_t)indices) : indices,
-            type, 1, 0, GL_UNSIGNED_SHORT, 1, 0, count, NULL);
+            type, 1, 0, GL_UNSIGNED_SHORT, 1, 0, count, dst);
     } else {
         if (type == GL_UNSIGNED_INT)
             iindices = (glstate->vao->elements) ? ((void*)((char*)glstate->vao->elements->data + (uintptr_t)indices))
@@ -533,10 +547,19 @@ void APIENTRY_GL4ES gl4es_glDrawRangeElements(GLenum mode, GLuint start, GLuint 
         if (!need_free) {
             GLushort* tmp = sindices;
             sindices = (GLushort*)malloc(count * sizeof(GLushort));
-            memcpy(sindices, tmp, count * sizeof(GLushort));
+            // combined copy + offset adjust (single pass over data)
+            if (start) {
+                for (int i = 0; i < count; i++)
+                    sindices[i] = tmp[i] - start;
+            } else {
+                memcpy(sindices, tmp, count * sizeof(GLushort));
+            }
+        } else {
+            if (start) {
+                for (int i = 0; i < count; i++)
+                    sindices[i] -= start;
+            }
         }
-        for (int i = 0; i < count; i++)
-            sindices[i] -= start; // TODO: should be optimizable
 
         if (globals4es.mergelist && list->stage >= STAGE_DRAW && is_list_compatible(list) && !list->use_glstate &&
             sindices) {
@@ -567,10 +590,17 @@ void APIENTRY_GL4ES gl4es_glDrawRangeElements(GLenum mode, GLuint start, GLuint 
         if (!need_free) {
             GLushort* tmp = sindices;
             sindices = (GLushort*)malloc(count * sizeof(GLushort));
-            memcpy(sindices, tmp, count * sizeof(GLushort));
+            // combined copy + offset adjust
+            if (start) {
+                for (int i = 0; i < count; i++)
+                    sindices[i] = tmp[i] - start;
+            } else {
+                memcpy(sindices, tmp, count * sizeof(GLushort));
+            }
+        } else if (start) {
+            for (int i = 0; i < count; i++)
+                sindices[i] -= start;
         }
-        for (int i = 0; i < count; i++)
-            sindices[i] -= start;
         list = arrays_to_renderlist(list, mode, start, end + 1);
         list->indices = sindices;
         list->ilen = count;
@@ -627,9 +657,15 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
     bool need_free =
         !((type == GL_UNSIGNED_SHORT) || (!compiling && !intercept && type == GL_UNSIGNED_INT && hardext.elementuint));
     if (need_free) {
+        void* dst = NULL;
+        if (!compiling && !intercept) {
+            ENSURE_SCRATCH_INDICES_CPU(count);
+            dst = glstate->scratch_indices_cpu;
+            need_free = false;  // scratch is reused, not malloc'd; skip free later
+        }
         sindices = copy_gl_array(
             (glstate->vao->elements) ? (void*)((char*)glstate->vao->elements->data + (uintptr_t)indices) : indices,
-            type, 1, 0, GL_UNSIGNED_SHORT, 1, 0, count, NULL);
+            type, 1, 0, GL_UNSIGNED_SHORT, 1, 0, count, dst);
         old_index = wantBufferIndex(0);
     } else {
         if (type == GL_UNSIGNED_INT)
@@ -769,21 +805,17 @@ void APIENTRY_GL4ES gl4es_glDrawArrays(GLenum mode, GLint first, GLsizei count) 
         free_renderlist(list);
     } else {
         if (mode == GL_QUADS) {
-            // TODO: move those static in glstate
-            static GLushort* indices = NULL;
-            static int indcnt = 0;
-            static int indfirst = 0;
+            // QUADS index cache now in glstate (quad_indices_cnt / quad_indices_first / quad_indices)
             int realfirst = ((first % 4) == 0) ? 0 : first;
             int realcount = count + (first - realfirst);
-            if ((indcnt < realcount) || (indfirst != realfirst)) {
-                if (indcnt < realcount) {
-                    indcnt = realcount;
-                    if (indices) free(indices);
-                    indices = (GLushort*)malloc(sizeof(GLushort) * (indcnt * 3 / 2));
+            if ((glstate->quad_indices_cnt < realcount) || (glstate->quad_indices_first != realfirst)) {
+                if (glstate->quad_indices_cnt < realcount) {
+                    glstate->quad_indices_cnt = realcount;
+                    glstate->quad_indices = (GLushort*)realloc(glstate->quad_indices, sizeof(GLushort) * (glstate->quad_indices_cnt * 3 / 2));
                 }
-                indfirst = realfirst;
-                GLushort* p = indices;
-                for (int i = 0, j = indfirst; i + 3 < indcnt; i += 4, j += 4) {
+                glstate->quad_indices_first = realfirst;
+                GLushort* p = glstate->quad_indices;
+                for (int i = 0, j = glstate->quad_indices_first; i + 3 < glstate->quad_indices_cnt; i += 4, j += 4) {
                     *(p++) = j + 0;
                     *(p++) = j + 1;
                     *(p++) = j + 2;
@@ -794,7 +826,7 @@ void APIENTRY_GL4ES gl4es_glDrawArrays(GLenum mode, GLint first, GLsizei count) 
                 }
             }
             GLuint old_buffer = wantBufferIndex(0);
-            glDrawElementsCommon(GL_TRIANGLES, 0, count * 3 / 2, count, indices + (first - indfirst) * 3 / 2, NULL, 1);
+            glDrawElementsCommon(GL_TRIANGLES, 0, count * 3 / 2, count, glstate->quad_indices + (first - glstate->quad_indices_first) * 3 / 2, NULL, 1);
             wantBufferIndex(old_buffer);
             return;
         }
@@ -879,21 +911,17 @@ void APIENTRY_GL4ES gl4es_glMultiDrawArrays(GLenum mode, const GLint* firsts, co
                 list = arrays_to_renderlist(NULL, mode, first, count + first);
         } else {
             if (mode == GL_QUADS) {
-                // TODO: move those static in glstate
-                static GLushort* indices = NULL;
-                static int indcnt = 0;
-                static int indfirst = 0;
+                // QUADS index cache now in glstate (quad_indices_cnt / quad_indices_first / quad_indices)
                 int realfirst = ((first % 4) == 0) ? 0 : first;
                 int realcount = count + (first - realfirst);
-                if ((indcnt < realcount) || (indfirst != realfirst)) {
-                    if (indcnt < realcount) {
-                        indcnt = realcount;
-                        if (indices) free(indices);
-                        indices = (GLushort*)malloc(sizeof(GLushort) * (indcnt * 3 / 2));
+                if ((glstate->quad_indices_cnt < realcount) || (glstate->quad_indices_first != realfirst)) {
+                    if (glstate->quad_indices_cnt < realcount) {
+                        glstate->quad_indices_cnt = realcount;
+                        glstate->quad_indices = (GLushort*)realloc(glstate->quad_indices, sizeof(GLushort) * (glstate->quad_indices_cnt * 3 / 2));
                     }
-                    indfirst = realfirst;
-                    GLushort* p = indices;
-                    for (int i = 0, j = indfirst; i + 3 < indcnt; i += 4, j += 4) {
+                    glstate->quad_indices_first = realfirst;
+                    GLushort* p = glstate->quad_indices;
+                    for (int i = 0, j = glstate->quad_indices_first; i + 3 < glstate->quad_indices_cnt; i += 4, j += 4) {
                         *(p++) = j + 0;
                         *(p++) = j + 1;
                         *(p++) = j + 2;
@@ -904,7 +932,7 @@ void APIENTRY_GL4ES gl4es_glMultiDrawArrays(GLenum mode, const GLint* firsts, co
                     }
                 }
                 GLuint old_index = wantBufferIndex(0);
-                glDrawElementsCommon(GL_TRIANGLES, 0, count * 3 / 2, count, indices + (first - indfirst) * 3 / 2, NULL,
+                glDrawElementsCommon(GL_TRIANGLES, 0, count * 3 / 2, count, glstate->quad_indices + (first - glstate->quad_indices_first) * 3 / 2, NULL,
                                      1);
                 wantBufferIndex(old_index);
                 continue;
@@ -1464,21 +1492,17 @@ void APIENTRY_GL4ES gl4es_glDrawArraysInstanced(GLenum mode, GLint first, GLsize
         free_renderlist(list);
     } else {
         if (mode == GL_QUADS) {
-            // TODO: move those static in glstate
-            static GLushort* indices = NULL;
-            static int indcnt = 0;
-            static int indfirst = 0;
+            // QUADS index cache now in glstate (quad_indices_cnt / quad_indices_first / quad_indices)
             int realfirst = ((first % 4) == 0) ? 0 : first;
             int realcount = count + (first - realfirst);
-            if ((indcnt < realcount) || (indfirst != realfirst)) {
-                if (indcnt < realcount) {
-                    indcnt = realcount;
-                    if (indices) free(indices);
-                    indices = (GLushort*)malloc(sizeof(GLushort) * (indcnt * 3 / 2));
+            if ((glstate->quad_indices_cnt < realcount) || (glstate->quad_indices_first != realfirst)) {
+                if (glstate->quad_indices_cnt < realcount) {
+                    glstate->quad_indices_cnt = realcount;
+                    glstate->quad_indices = (GLushort*)realloc(glstate->quad_indices, sizeof(GLushort) * (glstate->quad_indices_cnt * 3 / 2));
                 }
-                indfirst = realfirst;
-                GLushort* p = indices;
-                for (int i = 0, j = indfirst; i + 3 < indcnt; i += 4, j += 4) {
+                glstate->quad_indices_first = realfirst;
+                GLushort* p = glstate->quad_indices;
+                for (int i = 0, j = glstate->quad_indices_first; i + 3 < glstate->quad_indices_cnt; i += 4, j += 4) {
                     *(p++) = j + 0;
                     *(p++) = j + 1;
                     *(p++) = j + 2;
@@ -1489,7 +1513,7 @@ void APIENTRY_GL4ES gl4es_glDrawArraysInstanced(GLenum mode, GLint first, GLsize
                 }
             }
             GLuint old_buffer = wantBufferIndex(0);
-            glDrawElementsCommon(GL_TRIANGLES, 0, count * 3 / 2, count, indices + (first - indfirst) * 3 / 2, NULL,
+            glDrawElementsCommon(GL_TRIANGLES, 0, count * 3 / 2, count, glstate->quad_indices + (first - glstate->quad_indices_first) * 3 / 2, NULL,
                                  primcount);
             wantBufferIndex(old_buffer);
             return;
@@ -1536,9 +1560,15 @@ void APIENTRY_GL4ES gl4es_glDrawElementsInstanced(GLenum mode, GLsizei count, GL
     bool need_free =
         !((type == GL_UNSIGNED_SHORT) || (!compiling && !intercept && type == GL_UNSIGNED_INT && hardext.elementuint));
     if (need_free) {
+        void* dst = NULL;
+        if (!compiling && !intercept) {
+            ENSURE_SCRATCH_INDICES_CPU(count);
+            dst = glstate->scratch_indices_cpu;
+            need_free = false;  // scratch is reused, not malloc'd; skip free later
+        }
         sindices = copy_gl_array(
             (glstate->vao->elements) ? ((void*)((char*)glstate->vao->elements->data + (uintptr_t)indices)) : indices,
-            type, 1, 0, GL_UNSIGNED_SHORT, 1, 0, count, NULL);
+            type, 1, 0, GL_UNSIGNED_SHORT, 1, 0, count, dst);
         old_index = wantBufferIndex(0);
     } else {
         if (type == GL_UNSIGNED_INT)

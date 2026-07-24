@@ -16,9 +16,16 @@ KHASH_MAP_IMPL_INT(texenv, rendertexenv_t *);
 KHASH_MAP_IMPL_INT(gllisthead, renderlist_t*);
 
 renderlist_t *alloc_renderlist() {
-
-    renderlist_t *list = (renderlist_t *)malloc(sizeof(renderlist_t));
-    memset(list, 0, sizeof(renderlist_t));
+    renderlist_t *list;
+    // try to reuse from pool first
+    if (glstate->rl_pool) {
+        list = glstate->rl_pool;
+        glstate->rl_pool = list->next;  // pop from free-list
+        glstate->rl_pool_count--;
+        memset(list, 0, sizeof(renderlist_t));  // zero all fields
+    } else {
+        list = (renderlist_t *)calloc(1, sizeof(renderlist_t));  // calloc = malloc + zero
+    }
     list->cap = DEFAULT_RENDER_LIST_CAPACITY;
     list->matrix_val[0] = list->matrix_val[5] = list->matrix_val[10] = 
                           list->matrix_val[15] = 1.0f;
@@ -766,7 +773,14 @@ void free_renderlist(renderlist_t *list) {
             deleteSingleBuffer(list->vbo_indices);
 
         next = list->next;
-        free(list);
+        // recycle to free-list pool if under limit
+        if (glstate->rl_pool_count < RL_POOL_MAX) {
+            list->next = glstate->rl_pool;
+            glstate->rl_pool = list;
+            glstate->rl_pool_count++;
+        } else {
+            free(list);
+        }
     } while ((list = next));
 }
 

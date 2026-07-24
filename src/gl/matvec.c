@@ -323,21 +323,54 @@ void matrix_mul(const float *a, const float *b, float *c) {
 }
 
 void vector4_mult(const float *a, const float *b, float *c) {
-//TODO: NEON version of this
+#if defined(__ARM_NEON__) && !defined(__APPLE__)
+    asm volatile (
+    "vld1.f32 {d0-d1}, [%0]        \n"
+    "vld1.f32 {d2-d3}, [%1]        \n"
+    "vmul.f32 q0, q0, q1           \n"
+    "vst1.f32 {d0-d1}, [%2]        \n"
+    :
+    : "r"(a), "r"(b), "r"(c)
+    : "q0", "q1", "memory"
+    );
+#else
     for (int i=0; i<4; i++)
         c[i] = a[i]*b[i];
+#endif
 }
 
 void vector4_add(const float *a, const float *b, float *c) {
-//TODO: NEON version of this
+#if defined(__ARM_NEON__) && !defined(__APPLE__)
+    asm volatile (
+    "vld1.f32 {d0-d1}, [%0]        \n"
+    "vld1.f32 {d2-d3}, [%1]        \n"
+    "vadd.f32 q0, q0, q1           \n"
+    "vst1.f32 {d0-d1}, [%2]        \n"
+    :
+    : "r"(a), "r"(b), "r"(c)
+    : "q0", "q1", "memory"
+    );
+#else
     for (int i=0; i<4; i++)
         c[i] = a[i]+b[i];
+#endif
 }
 
 void vector4_sub(const float *a, const float *b, float *c) {
-    //TODO: NEON version of this
-        for (int i=0; i<4; i++)
-            c[i] = a[i]-b[i];
+#if defined(__ARM_NEON__) && !defined(__APPLE__)
+    asm volatile (
+    "vld1.f32 {d0-d1}, [%0]        \n"
+    "vld1.f32 {d2-d3}, [%1]        \n"
+    "vsub.f32 q0, q0, q1           \n"
+    "vst1.f32 {d0-d1}, [%2]        \n"
+    :
+    : "r"(a), "r"(b), "r"(c)
+    : "q0", "q1", "memory"
+    );
+#else
+    for (int i=0; i<4; i++)
+        c[i] = a[i]-b[i];
+#endif
 }
     
 void set_identity(float* mat) {

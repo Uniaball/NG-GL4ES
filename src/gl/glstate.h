@@ -101,6 +101,16 @@ extern "C"
         // scratch array
         int scratch_alloc;
         void* scratch;
+        // scratch indices buffer (CPU-side, for index type conversion)
+        GLushort* scratch_indices_cpu;
+        int scratch_indices_cpu_cap;
+        // renderlist object pool (free-list for alloc/free reuse)
+        renderlist_t* rl_pool;
+        int rl_pool_count;
+        // QUADS->TRIANGLES index conversion cache (moved from static in drawing.c glDrawElementsCommon)
+        GLushort* quad_indices;
+        int quad_indices_cnt;
+        int quad_indices_first;
         // glBegin/glEnd merger
         int merger_cap;
         GLfloat* merger_master;

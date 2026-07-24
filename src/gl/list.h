@@ -8,6 +8,8 @@
 #include "attributes.h"
 #include "gles.h"
 
+#define RL_POOL_MAX 64  // max renderlist nodes in free-list pool
+
 typedef enum {
 	STAGE_NONE = 0,
 	STAGE_PUSH,

@@ -518,6 +518,15 @@ void DeleteGLState(void* oldstate) {
     // TODO: delete the "immediate" stuff and bitmap texture?
     // scratch buffer
     if (state->scratch) free(state->scratch);
+    if (state->scratch_indices_cpu) free(state->scratch_indices_cpu);
+    // renderlist pool
+    while (state->rl_pool) {
+        renderlist_t* next = state->rl_pool->next;
+        free(state->rl_pool);
+        state->rl_pool = next;
+    }
+    // QUADS index cache
+    if (state->quad_indices) free(state->quad_indices);
     // merger buffers
     if (state->merger_master) free(state->merger_master);
     if (state->merger_secondary) free(state->merger_secondary);

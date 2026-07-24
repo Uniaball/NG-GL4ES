@@ -591,14 +591,22 @@ program_t* APIENTRY_GL4ES fpe_CustomShader_DefaultVertex(program_t* glprogram, f
 }
 
 void APIENTRY_GL4ES fpe_SyncUniforms(uniformcache_t* cache, program_t* glprogram) {
-    // TODO: Optimize this...
+    // Optimized: skip re-send if value unchanged (compare parent cache vs child cache)
     khash_t(uniformlist)* uniforms = glprogram->uniform;
     uniform_t* m;
     khint_t k;
-    DBG(int cnt = 0;)
+    DBG(int cnt = 0; int skipped = 0;)
     // don't use m->size, as each element has it's own uniform...
     kh_foreach(
         uniforms, k, m, if (m->parent_size) {
+            // cache_size == uniformsize(type) which matches rsize in GoUniform*
+            if (m->cache_size > 0 &&
+                memcmp((char*)cache->cache + m->parent_offs,
+                       (char*)glprogram->cache.cache + m->cache_offs,
+                       m->cache_size) == 0) {
+                DBG(++skipped;)
+                continue;   // value unchanged, skip re-send
+            }
             DBG(++cnt;)
             switch (m->type) {
             case GL_FLOAT:
@@ -637,7 +645,7 @@ void APIENTRY_GL4ES fpe_SyncUniforms(uniformcache_t* cache, program_t* glprogram
                         PrintEnum(m->type));
             }
         });
-    DBG(DBGLOGD("Uniform sync'd with %d and father (%d uniforms)\n", glprogram->id, cnt);)
+    DBG(DBGLOGD("Uniform sync'd with %d and father (%d synced, %d skipped)\n", glprogram->id, cnt, skipped);)
 }
 // ********* Fixed Pipeling function wrapper *********
 
