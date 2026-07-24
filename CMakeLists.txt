@@ -65,6 +65,7 @@ if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT CMAKE_C_COMPILER_ID MATCHES 
         message(STATUS "    -fno-rtti                      : disable RTTI (CXX only)")
         message(STATUS "    -D_NDK_MATH_NO_SOFT=1         : force hardware FP (Android)")
         message(STATUS "    -ffast-math                    : aggressive FP optimizations")
+        message(STATUS "    -Wno-nan-infinity-disabled     : suppress INF/NAN warnings from 3rdparty")
         message(STATUS "")
         message(STATUS "  Link flags:")
         message(STATUS "    -Wl,--as-needed                : link only used libraries")
@@ -93,6 +94,7 @@ if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT CMAKE_C_COMPILER_ID MATCHES 
             $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
             -D_NDK_MATH_NO_SOFT=1
             -ffast-math
+            -Wno-nan-infinity-disabled
         )
         add_link_options(
             -Wl,--as-needed
