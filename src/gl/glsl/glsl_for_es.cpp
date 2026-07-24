@@ -750,15 +750,25 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
 
     inject_ngg_macro_definition(ret);
 
-    // Strip Vulkan-only push_constant qualifier before passing to glslang.
-    // Some shaders use layout(push_constant) in #ifdef VULKAN blocks.
-    // glslang rejects push_constant for OpenGL compilation (only allowed in
-    // Vulkan GLSL). Replace with std140 (standard GLSL uniform block layout)
-    // so glslang can proceed to SPIRV generation.
+    // Disable Vulkan-specific #ifdef VULKAN blocks before passing to glslang.
+    // Some Minecraft shaders have:
+    //   #ifdef VULKAN
+    //   layout(push_constant) uniform PC { vec3 u_Foo; ... };
+    //   #else
+    //   uniform vec3 u_Foo; ...
+    //   #endif
+    // The VULKAN branch uses push_constant (Vulkan-only, glslang rejects for
+    // OpenGL) and makes members accessible without the PC. block-name prefix.
+    // Simply replacing push_constant with std140 creates a named uniform block
+    // whose members require PC.u_Foo access — but the shader body uses u_Foo
+    // directly (line 2253: "u_RegionOffset + ...").
+    //
+    // Correct fix: force the #else branch by replacing #ifdef VULKAN with
+    // #if 0. The #else branch uses standard OpenGL individual uniform
+    // declarations which match the shader body's direct access pattern.
     {
-        static const std::regex push_constant_re(R"(layout\s*\(\s*push_constant\s*\))",
-                                                  std::regex::ECMAScript);
-        ret = std::regex_replace(ret, push_constant_re, "layout(std140)");
+        static const std::regex vulkan_ifdef_re(R"(#ifdef\s+VULKAN)");
+        ret = std::regex_replace(ret, vulkan_ifdef_re, "#if 0 // VULKAN");
     }
 
     // Convert samplerBuffer types to sampler2D BEFORE glslang/SPIRV compilation.
