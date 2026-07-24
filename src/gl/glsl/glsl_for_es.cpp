@@ -970,7 +970,6 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
                 SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);
             }
         }
-    }
 
     return result;
 }
