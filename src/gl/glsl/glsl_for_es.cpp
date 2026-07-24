@@ -839,7 +839,7 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
     bool has_sampler_buffer = (result.find("samplerBuffer") != std::string::npos);
 
     if (has_sampler_buffer) {
-        DBG(SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: found samplerBuffer types, converting to sampler2D\n");)
+        SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: found samplerBuffer types, converting to sampler2D\n");
 
         // Replace usamplerBuffer → usampler2D, isamplerBuffer → isampler2D, samplerBuffer → sampler2D
         size_t pos = 0;
@@ -913,7 +913,7 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
             i++;
         }
         if (uvec_replaced > 0) {
-            DBG(SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);)
+            SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);
         }
     }
 
@@ -966,12 +966,12 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     const char* shader_type_name = (glsl_type == GL_VERTEX_SHADER) ? "VS" :
                                     (glsl_type == GL_FRAGMENT_SHADER) ? "FS" : "OTHER";
     bool has_sbuf = (strstr(glsl_code, "samplerBuffer") != NULL);
-    DBG(SHUT_LOGD("[glsl-for-es] GLSLtoGLSLES_2 entry: type=%s src_len=%zu has_samplerBuffer=%d\n",
+    SHUT_LOGD("[glsl-for-es] GLSLtoGLSLES_2 entry: type=%s src_len=%zu has_samplerBuffer=%d\n",
                    shader_type_name, strlen(glsl_code), has_sbuf);)
 
     std::string correct_glsl_str = preprocess_glsl(glsl_code, glsl_type, &atomicCounterEmulated);
     int glsl_version = get_or_add_glsl_version(correct_glsl_str);
-    DBG(SHUT_LOGD("[glsl-for-es] glsl_version=%d essl_target=%d\n", glsl_version, essl_version);)
+    SHUT_LOGD("[glsl-for-es] glsl_version=%d essl_target=%d\n", glsl_version, essl_version);
 
     if (!glslang_inited) {
         glslang::InitializeProcess();
@@ -982,16 +982,15 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     std::vector<unsigned int> spirv_code = glsl_to_spirv(glsl_type, glsl_version, s, errc);
     if (errc != 0) {
         return_code = -1;
-        DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc))
-        return "";
+        SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc);
         return "";
     }
-    DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size());)
+    SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size());
     errc = 0;
     std::string essl = spirv_to_essl(spirv_code, essl_version, errc);
     if (errc != 0) {
         return_code = -2;
-        DBG(SHUT_LOGD("[glsl-for-es] spirv_to_essl FAILED: errc=%d\n", errc);)
+        SHUT_LOGD("[glsl-for-es] spirv_to_essl FAILED: errc=%d\n", errc);
         return "";
     }
 
