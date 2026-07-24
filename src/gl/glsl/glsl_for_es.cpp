@@ -811,7 +811,6 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     if (!shader.parse(&TBuiltInResource_resources, glsl_version, true, EShMsgDefault)) {
         SHUT_LOGD("[glsl-for-es] glslang compile ERROR: %s\n", shader.getInfoLog());
         SHUT_LOGD("[glsl-for-es] glslang debug: %s\n", shader.getInfoDebugLog());
-        SHUT_LOGD("[glsl-for-es] glslang FAILED source (first 2000 chars):\n%.2000s\n", shader_src[0]);
         errc = -1;
         return {};
     }
