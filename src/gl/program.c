@@ -1113,6 +1113,15 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                     {
                                         const char* vert_src = glprogram->last_vert->converted;
                                         int skip_patch = 0;
+
+                                        // If VS and FS went through DIFFERENT conversion paths
+                                        // (one SPIRV/is_converted_essl_320=1, other FPE/=0),
+                                        // source-level varying name matching is unreliable.
+                                        // SPIRV-cross and FPE use different internal naming
+                                        // conventions. Always force-add the varying patch.
+                                        int mixed_paths = (glprogram->last_vert->is_converted_essl_320
+                                                        != glprogram->last_frag->is_converted_essl_320);
+                                        if (!mixed_paths) {
                                         // Check 1: exact form from FS in-decl
                                         if (strstr(vert_src, out_decl)) {
                                             skip_patch = 1;
@@ -1136,6 +1145,7 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                             free(out_decl);
                                             continue;
                                         }
+                                        } // if (!mixed_paths)
                                     }
                                     size_t vs_orig_len = strlen(glprogram->last_vert->converted);
                                     size_t out_decl_len = strlen(out_decl);
