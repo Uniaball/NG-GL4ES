@@ -744,9 +744,30 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
 
     inject_ngg_macro_definition(ret);
 
-    if (/*hardware->emulate_texture_buffer*/ 0) {
-        // Sampler buffer processing
-        process_sampler_buffer(ret);
+    // Convert samplerBuffer types to sampler2D BEFORE glslang/SPIRV compilation.
+    // glslang rejects samplerBuffer without GL_EXT_texture_buffer, but sampler2D
+    // is always valid. The emulate_sampler_buffers_and_fix_types post-processing
+    // will handle texelFetch() coordinate rewriting after spirv-cross.
+    {
+        size_t pos = 0;
+        while ((pos = ret.find("usamplerBuffer", pos)) != std::string::npos) {
+            ret.replace(pos, 14, "usampler2D");
+            pos += 10;
+        }
+        pos = 0;
+        while ((pos = ret.find("isamplerBuffer", pos)) != std::string::npos) {
+            ret.replace(pos, 14, "isampler2D");
+            pos += 10;
+        }
+        pos = 0;
+        while ((pos = ret.find("samplerBuffer", pos)) != std::string::npos) {
+            if (pos > 0 && (ret[pos - 1] == 'u' || ret[pos - 1] == 'i')) {
+                pos += 13;
+                continue;
+            }
+            ret.replace(pos, 13, "sampler2D");
+            pos += 9;
+        }
     }
 
     *atomicCounterEmulated = process_non_opaque_atomic_to_ssbo(ret);
@@ -870,13 +891,12 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
             std::regex::ECMAScript);
         result = std::regex_replace(result, texel_fetch_regex,
                                      "texelFetch($1, ivec2($2, 0), 0)");
-    }
 
-    // Fix uvec type declarations that cause problems in ESSL
-    // Convert "uvec3" → "vec3" and "uvec4" → "vec4" for variables used in float operations.
-    // This is a workaround for spirv-cross generating incorrect types.
-    // We look for patterns like: uvec3 <name> = <something>;
-    // and replace them with vec3, adding explicit cast.
+    // Fix uvec→vec type mismatches from spirv-cross output, but ONLY for
+    // samplerBuffer shaders. spirv-cross sometimes produces uvec3*float etc.
+    // when converting SPIRV from samplerBuffer-based shaders to ESSL.
+    // Non-samplerBuffer shaders (MC 1.21.1 Sodium, etc.) need uvec preserved
+    // for bitwise ops (&, |, ^, <<, >>) — converting to vec would break them.
     {
         // Simple fix: replace all "uvec3 " with "vec3 " and "uvec4 " with "vec4 "
         // Since most shaders don't intentionally use uvec for rendering, this is usually safe.
@@ -915,6 +935,7 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
         if (uvec_replaced > 0) {
             SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);
         }
+    }
     }
 
     return result;
