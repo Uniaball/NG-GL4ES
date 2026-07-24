@@ -750,6 +750,17 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
 
     inject_ngg_macro_definition(ret);
 
+    // Strip Vulkan-only push_constant qualifier before passing to glslang.
+    // Some shaders use layout(push_constant) in #ifdef VULKAN blocks.
+    // glslang rejects push_constant for OpenGL compilation (only allowed in
+    // Vulkan GLSL). Replace with std140 (standard GLSL uniform block layout)
+    // so glslang can proceed to SPIRV generation.
+    {
+        static const std::regex push_constant_re(R"(layout\s*\(\s*push_constant\s*\))",
+                                                  std::regex::ECMAScript);
+        ret = std::regex_replace(ret, push_constant_re, "layout(std140)");
+    }
+
     // Convert samplerBuffer types to sampler2D BEFORE glslang/SPIRV compilation.
     // glslang rejects samplerBuffer without GL_EXT_texture_buffer, but sampler2D
     // is always valid. We also rewrite texelFetch() from 1D to 2D coords so
@@ -918,46 +929,46 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
                                      "texelFetch($1, ivec2($2, 0), 0)");
     }
 
-    // Fix uvec→vec type mismatches from spirv-cross output.
-    // spirv-cross sometimes produces uvec3/uvec4 in ESSL that get used with
-    // float operations (e.g. uvec3 * float), which causes compile errors on
-    // mobile GPU drivers (e.g. "no operation '*' exists that takes a
-    // left-hand operand of type '3-component vector of uint' and a right
-    // operand of type 'const float'" on Adreno).
-    //
-    // This runs for ALL shaders, not just samplerBuffer ones.
-    // We skip uniform declarations and layout-qualified lines to preserve
-    // uint types where they're structurally needed.
-    {
-        size_t i = 0;
-        int uvec_replaced = 0;
+        // Fix uvec→vec type mismatches from spirv-cross output for samplerBuffer
+        // shaders ONLY. spirv-cross sometimes produces uvec3/uvec4 in ESSL when
+        // converting SPIRV from samplerBuffer-based shaders. These uvec types get
+        // used with float operations, causing compile errors (e.g. uvec3*float).
+        //
+        // IMPORTANT: this is gated by has_sampler_buffer. Non-samplerBuffer
+        // shaders (e.g. Sodium block_layer in MC 1.21.1) may LEGITIMATELY use
+        // uvec for bitwise ops (>>, &, |). Replacing uvec→vec in those shaders
+        // produces vec3>>vec3 which the GPU driver rejects.
+        if (has_sampler_buffer) {
+            size_t i = 0;
+            int uvec_replaced = 0;
 
-        while (i < result.length()) {
-            // Skip lines that are uniform declarations
-            bool is_uniform = false;
-            size_t line_start = i;
-            while (line_start > 0 && result[line_start - 1] != '\n') line_start--;
-            if (strncmp(&result[line_start], "uniform", 7) == 0 ||
-                strncmp(&result[line_start], "layout", 6) == 0) {
-                const char* line_ptr = &result[line_start];
-                const char* semi = strchr(line_ptr, ';');
-                if (semi && strncmp(line_ptr, "uniform", 7) == 0) {
-                    is_uniform = true;
+            while (i < result.length()) {
+                // Skip lines that are uniform declarations
+                bool is_uniform = false;
+                size_t line_start = i;
+                while (line_start > 0 && result[line_start - 1] != '\n') line_start--;
+                if (strncmp(&result[line_start], "uniform", 7) == 0 ||
+                    strncmp(&result[line_start], "layout", 6) == 0) {
+                    const char* line_ptr = &result[line_start];
+                    const char* semi = strchr(line_ptr, ';');
+                    if (semi && strncmp(line_ptr, "uniform", 7) == 0) {
+                        is_uniform = true;
+                    }
                 }
-            }
 
-            if (!is_uniform) {
-                size_t cur_len = result.length();
-                if (i + 5 <= cur_len && (result.compare(i, 5, "uvec3") == 0 ||
-                                          result.compare(i, 5, "uvec4") == 0)) {
-                    result.replace(i, 5, std::string("vec") + result[i + 4]);
-                    uvec_replaced++;
+                if (!is_uniform) {
+                    size_t cur_len = result.length();
+                    if (i + 5 <= cur_len && (result.compare(i, 5, "uvec3") == 0 ||
+                                              result.compare(i, 5, "uvec4") == 0)) {
+                        result.replace(i, 5, std::string("vec") + result[i + 4]);
+                        uvec_replaced++;
+                    }
                 }
+                i++;
             }
-            i++;
-        }
-        if (uvec_replaced > 0) {
-            SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);
+            if (uvec_replaced > 0) {
+                SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);
+            }
         }
     }
 
