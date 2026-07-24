@@ -2,7 +2,7 @@ Usage
 ----
 
 There are many environnement variable to control gl4es behavour. All are numeric, except LIBGL_VERSION that take a string, LIBGL_FBO that takes a 2d size (WxH), and both LIBGL_EGL and LIBGL_GLES that take path/filename.
-You can also change many of this variable at runtime using the `glHint(...)` function. See [gl4eshint.h](include/gl4eshint.h) for the list of #define to use in this function.
+You can also change many of this variable at runtime using the `glHint(...)` function. See [gl4eshint.h](../include/gl4eshint.h) for the list of #define to use in this function.
 
 ##### LIBGL_FB
 Controls the Framebuffer output

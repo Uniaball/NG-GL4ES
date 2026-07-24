@@ -1,19 +1,37 @@
-.gdb_history
-.vscode/
-CMakeFiles/
+# Build directories
+/build/
+/out/
+cmake-build-*/
 lib/
 libs/
 libs2/
-Makefile
+
+# CMake generated files
 CMakeCache.txt
-CTestTestfile.cmake
+CMakeFiles/
 cmake_install.cmake
-spec/yml/gles-1.1-full.yml
-/build/
-/tests/*.png
-/src/glsl
-.vs
-out
+CTestTestfile.cmake
 CMakeSettings.json
-.cache
-.trae
+Makefile
+compile_commands.json
+
+# Build artifacts
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+
+# Generated spec data
+tools/yml/gles-1.1-full.yml
+
+# IDE / editor
+.vscode/
+.vs/
+.idea/
+.cache/
+.trae/
+
+# Debug / misc
+.gdb_history
+.DS_Store

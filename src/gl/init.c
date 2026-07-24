@@ -12,7 +12,7 @@
 #define getcwd(a, b) _getcwd(a, b)
 #define snprintf _snprintf
 #endif
-#include "../../version.h"
+#include "version.h"
 #include "../glx/glx_gbm.h"
 #include "../glx/glx.h"
 #include "../glx/streaming.h"

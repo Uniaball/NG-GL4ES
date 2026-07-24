@@ -18,7 +18,7 @@ extern "C"
 #include "texgen.h"
 #include "string_utils.h"
 #include "GL/gl.h"
-#include "../../version.h"
+#include "version.h"
 #include "envvars.h"
 
 // #define DEBUG

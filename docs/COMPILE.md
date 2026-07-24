@@ -117,7 +117,7 @@ On Android build of GL4ES, no X11 function are called. So most `glX` function ar
 On Android version 4.0 and earlier, there is a bug that prevent dlopen to be called inside dlopen (see [here](http://grokbase.com/t/gg/android-ndk/124bdvscqx/block-with-calling-dlopen-and-dlclose)).
 GL4ES use a "library constructor" to initialize itself a load, and that constructor do some dlopen (to load EGL and GLES libraries), so it will trigger that bug.
 If you are targeting a wide range of device, you should probably activate the workaround:
-1. Modify [Android.mk](Android.mk) to uncomment `#LOCAL_CFLAGS += -DNO_INIT_CONSTRUCTOR` near the end of the file, to prevent the use of the library constructor.
+1. Modify `Android.mk` to uncomment `#LOCAL_CFLAGS += -DNO_INIT_CONSTRUCTOR` near the end of the file, to prevent the use of the library constructor.
 2. In your code, call `void initialize_gl4es()` as soon as possible after loading GL4ES, and before using any GL function.
 
 To try the GLES2 backend, you can compile gl4es with ES2 by default (so you don't have to mess with env. variable). Simply uncomment `#LOCAL_CFLAGS += -DDEFAULT_ES=2`, and create the GL Context as GLES2.

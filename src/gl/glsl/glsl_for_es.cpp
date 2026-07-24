@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <string>
 #include <sstream>
-#include "../../../version.h"
+#include "version.h"
 
 extern "C"
 {
