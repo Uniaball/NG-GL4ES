@@ -850,21 +850,21 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     TBuiltInResource TBuiltInResource_resources = InitResources();
 
     if (!shader.parse(&TBuiltInResource_resources, glsl_version, true, EShMsgDefault)) {
-        DBG(SHUT_LOGD("glslang: GLSL Compiling ERROR: \n%s", shader.getInfoLog());)
+        SHUT_LOGD("[glsl-for-es] glslang compile ERROR: %s\n", shader.getInfoLog());
+        SHUT_LOGD("[glsl-for-es] glslang debug: %s\n", shader.getInfoDebugLog());
         errc = -1;
         return {};
     }
-    DBG(SHUT_LOGD("GLSL Compiled to SPIRV.");)
 
     glslang::TProgram program;
     program.addShader(&shader);
 
     if (!program.link(EShMsgDefault)) {
-        DBG(SHUT_LOGD("glslang: GLSL Linking ERROR: \n%s", program.getInfoLog());)
+        SHUT_LOGD("[glsl-for-es] glslang link ERROR: %s\n", program.getInfoLog());
+        SHUT_LOGD("[glsl-for-es] glslang link debug: %s\n", program.getInfoDebugLog());
         errc = -1;
         return {};
     }
-    DBG(SHUT_LOGD("GLSL Linked.");)
     std::vector<unsigned int> spirv_code;
     glslang::SpvOptions spvOptions;
     spvOptions.disableOptimizer = false;
