@@ -1008,6 +1008,9 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
 
         // For each fragment "in", check if vertex shader has matching "out"
         int needs_recompile = 0;
+        if (frag_in_count > 0) {
+            SHUT_LOGD("[program] Cross-stage varying check: found %d fragment 'in' declarations, checking vertex 'out'...\n", frag_in_count);
+        }
         for (int i = 0; i < frag_in_count; i++) {
             const char* vname = frag_ins[i];
             if (!vname[0]) continue;
@@ -1127,7 +1130,7 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                         free(glprogram->last_vert->converted);
                                         glprogram->last_vert->converted = new_vs;
                                         needs_recompile = 1;
-                                        DBG(SHUT_LOGD("Patched vertex shader to add missing varying: %s\n", out_decl));
+                                        SHUT_LOGD("[program] Patched vertex shader to add missing varying: %s\n", out_decl);
                                     }
                                     free(out_decl);
                                 }
@@ -1157,7 +1160,7 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                         gles_glGetShaderInfoLog(glprogram->last_vert->id, 500, &length, tmp);
                         SHUT_LOGD("PATCHED VERTEX SHADER COMPILE FAILED: %s\n", tmp);)
                 } else {
-                    DBG(SHUT_LOGD("Patched vertex shader compiled successfully\n"));
+                    SHUT_LOGD("[program] Patched vertex shader compiled successfully, re-linking\n");
                 }
             }
         }

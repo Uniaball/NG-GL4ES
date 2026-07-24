@@ -780,10 +780,12 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
             converted = 1;
         }
         if (converted) {
-            // Rewrite texelFetch(sampler, int) → texelFetch(sampler, ivec2(int, 0), 0)
-            // so glslang accepts the 2D sampler call syntax.
+            // Rewrite texelFetch(sampler, int) and texelFetch(sampler, int, 0)
+            // → texelFetch(sampler, ivec2(int, 0), 0) so glslang accepts it.
+            // The optional (, 0) handles buffer-texture-style calls that already
+            // supply a LOD parameter (valid in GLSL ≥ 400 for samplerBuffer).
             static const std::regex texel_fetch_pre_rx(
-                R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*\))",
+                R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*(?:,\s*0\s*)?\s*\))",
                 std::regex::ECMAScript);
             ret = std::regex_replace(ret, texel_fetch_pre_rx,
                                       "texelFetch($1, ivec2($2, 0), 0)");
@@ -904,10 +906,10 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
             pos += 9;
         }
 
-        // Convert texelFetch(sampler2D_name, int_coord) → texelFetch(sampler2D_name, ivec2(int_coord, 0), 0)
-        // Pattern: texelFetch( <sampler_name>, <int_expr> )
+        // Convert texelFetch(sampler2D_name, int_coord) / texelFetch(sampler2D_name, int_coord, 0)
+        // → texelFetch(sampler2D_name, ivec2(int_coord, 0), 0)
         static const std::regex texel_fetch_regex(
-            R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*\))",
+            R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*(?:,\s*0\s*)?\s*\))",
             std::regex::ECMAScript);
         result = std::regex_replace(result, texel_fetch_regex,
                                      "texelFetch($1, ivec2($2, 0), 0)");
