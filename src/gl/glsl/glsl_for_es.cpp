@@ -912,8 +912,9 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
             }
             i++;
         }
-        if (uvec_replaced > 0)
+        if (uvec_replaced > 0) {
             DBG(SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);)
+        }
     }
 
     return result;
