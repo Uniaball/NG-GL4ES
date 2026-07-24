@@ -949,6 +949,204 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
             }
         }
     }
+    // ===================================================================
+    // === CROSS-STAGE VARYING CONSISTENCY CHECK
+    // ===================================================================
+    // Some shader conversions (especially GLSL→SPIRV→ESSL) can produce
+    // inconsistent varying names between vertex and fragment stages.
+    // E.g., fragment shader has "in vec4 Color;" but vertex shader is
+    // missing "out vec4 Color;". This causes GLES link failures like:
+    //   "input Color not declared in output from previous stage"
+    // We patch the vertex shader to declare any missing varyings before linking.
+    if (glprogram->last_vert && glprogram->last_frag &&
+        glprogram->last_vert->converted && glprogram->last_frag->converted) {
+
+        // Extract fragment shader "in" variable names
+        char frag_ins[256][128] = {{0}};
+        int frag_in_count = 0;
+        {
+            const char* src = glprogram->last_frag->converted;
+            const char* p = src;
+            while (*p && frag_in_count < 256) {
+                // Look for lines starting with "in " (after whitespace)
+                while (*p && (*p == ' ' || *p == '\t')) p++;
+                if (strncmp(p, "in ", 3) == 0) {
+                    p += 3;
+                    // Skip precision qualifier if present
+                    while (*p == ' ') p++;
+                    if (strncmp(p, "highp ", 6) == 0) p += 6;
+                    else if (strncmp(p, "mediump ", 8) == 0) p += 8;
+                    else if (strncmp(p, "lowp ", 5) == 0) p += 5;
+                    // Skip type
+                    while (*p == ' ') p++;
+                    while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && *p != ';') p++;
+                    // Skip to variable name
+                    while (*p == ' ' || *p == '\t') p++;
+                    // Extract the variable name
+                    const char* name_start = p;
+                    while (*p && *p != ' ' && *p != '\t' && *p != ';' && *p != '\n' && *p != '\r' && *p != '[') p++;
+                    if (p > name_start && *name_start != 'g' || (p - name_start < 2) || name_start[1] != 'l') { // skip gl_ vars
+                        int name_len = p - name_start;
+                        if (name_len > 0 && name_len < 127) {
+                            // Check it's not a system input like gl_FragCoord
+                            int is_system = 0;
+                            if (name_len >= 3 && name_start[0] == 'g' && name_start[1] == 'l' && name_start[2] == '_')
+                                is_system = 1;
+                            if (!is_system) {
+                                strncpy(frag_ins[frag_in_count], name_start, name_len);
+                                frag_ins[frag_in_count][name_len] = '\0';
+                                frag_in_count++;
+                            }
+                        }
+                    }
+                }
+                // Advance to next line
+                while (*p && *p != '\n') p++;
+                if (*p == '\n') p++;
+            }
+        }
+
+        // For each fragment "in", check if vertex shader has matching "out"
+        int needs_recompile = 0;
+        for (int i = 0; i < frag_in_count; i++) {
+            const char* vname = frag_ins[i];
+            if (!vname[0]) continue;
+
+            // Search for "out ... <vname>;" in vertex shader
+            const char* vsrc = glprogram->last_vert->converted;
+            // Build search patterns
+            int found = 0;
+            const char* search_in_vs = vsrc;
+            while (*search_in_vs) {
+                // Look for "out " keyword
+                const char* outptr = strstr(search_in_vs, "out ");
+                if (!outptr) break;
+                // Find the end of this line
+                const char* line_end = strchr(outptr, '\n');
+                if (!line_end) line_end = outptr + strlen(outptr);
+                // Check if this declaration contains our variable name
+                // Find the variable name in this "out" declaration
+                const char* decl_end = strchr(outptr, ';');
+                if (decl_end && decl_end < line_end) {
+                    // Find variable name (last word before semicolon)
+                    const char* name_end = decl_end;
+                    while (name_end > outptr && (*(name_end-1) == ' ' || *(name_end-1) == '\t'
+                           || *(name_end-1) == ']')) name_end--;
+                    const char* name_start = name_end;
+                    while (name_start > outptr && *(name_start-1) != ' ' && *(name_start-1) != '\t') name_start--;
+
+                    int decl_name_len = name_end - name_start;
+                    int vname_len = strlen(vname);
+                    // Handle array declarations like "Color[1]" - extract base name
+                    const char* bracket = strchr(vname, '[');
+                    int base_len = bracket ? (int)(bracket - vname) : vname_len;
+
+                    if (decl_name_len == base_len && strncmp(name_start, vname, base_len) == 0) {
+                        found = 1;
+                        break;
+                    }
+                }
+                search_in_vs = outptr + 4; // advance past "out "
+            }
+
+            if (!found) {
+                // Missing varying! Need to patch vertex shader.
+                // Find the complete in-declaration in the fragment shader
+                const char* fsrc = glprogram->last_frag->converted;
+                const char* in_decl = NULL;
+                const char* fscan = fsrc;
+                while (*fscan) {
+                    // Look for "in " at line start
+                    while (*fscan && (*fscan == ' ' || *fscan == '\t')) fscan++;
+                    if (strncmp(fscan, "in ", 3) == 0) {
+                        const char* decl_start = fscan;
+                        fscan += 3;
+                        // Find semicolon
+                        const char* semi = strchr(fscan, ';');
+                        const char* nl = strchr(fscan, '\n');
+                        if (semi && (!nl || semi < nl)) {
+                            // Check if this declaration contains our variable name
+                            // Look for variable name in the declaration
+                            const char* last_space = semi;
+                            while (last_space > decl_start + 3 &&
+                                   *(last_space-1) != ' ' && *(last_space-1) != '\t')
+                                last_space--;
+                            int decl_name_len = semi - last_space;
+                            int vname_len = strlen(vname);
+                            const char* bracket2 = strchr(vname, '[');
+                            int base_len2 = bracket2 ? (int)(bracket2 - vname) : vname_len;
+                            if (decl_name_len == base_len2 &&
+                                strncmp(last_space, vname, base_len2) == 0) {
+                                // Found the declaration! Replace "in" with "out"
+                                int decl_len = semi - decl_start + 1;
+                                char* out_decl = (char*)malloc(decl_len + 10);
+                                if (out_decl) {
+                                    strncpy(out_decl, decl_start, decl_len);
+                                    out_decl[decl_len] = '\0';
+                                    // Replace "in " with "out " at the beginning
+                                    // Find the "in" keyword
+                                    char* in_kw = strstr(out_decl, "in ");
+                                    if (in_kw) {
+                                        in_kw[0] = 'o';
+                                        in_kw[1] = 'u';
+                                        in_kw[2] = 't';
+                                    }
+                                    // Append to vertex shader converted source
+                                    size_t vs_orig_len = strlen(glprogram->last_vert->converted);
+                                    size_t out_decl_len = strlen(out_decl);
+                                    char* new_vs = (char*)malloc(vs_orig_len + out_decl_len + 4);
+                                    if (new_vs) {
+                                        strcpy(new_vs, glprogram->last_vert->converted);
+                                        // Add newline if the source doesn't end with one
+                                        if (vs_orig_len > 0 &&
+                                            new_vs[vs_orig_len-1] != '\n') {
+                                            strcat(new_vs, "\n");
+                                            vs_orig_len++;
+                                        }
+                                        strcat(new_vs, out_decl);
+                                        strcat(new_vs, "\n");
+                                        free(glprogram->last_vert->converted);
+                                        glprogram->last_vert->converted = new_vs;
+                                        needs_recompile = 1;
+                                        DBG(SHUT_LOGD("Patched vertex shader to add missing varying: %s\n", out_decl));
+                                    }
+                                    free(out_decl);
+                                }
+                            }
+                        }
+                    }
+                    while (*fscan && *fscan != '\n') fscan++;
+                    if (*fscan == '\n') fscan++;
+                }
+            }
+        }
+
+        // Recompile vertex shader if we patched it
+        if (needs_recompile) {
+            LOAD_GLES2(glShaderSource);
+            LOAD_GLES2(glCompileShader);
+            LOAD_GLES2(glGetShaderiv);
+            if (gles_glShaderSource && gles_glCompileShader) {
+                const char* patched_src = glprogram->last_vert->converted;
+                gles_glShaderSource(glprogram->last_vert->id, 1, &patched_src, NULL);
+                gles_glCompileShader(glprogram->last_vert->id);
+                GLint status = 0;
+                gles_glGetShaderiv(glprogram->last_vert->id, GL_COMPILE_STATUS, &status);
+                if (status != GL_TRUE) {
+                    DBG(char tmp[500]; GLint length;
+                        LOAD_GLES2(glGetShaderInfoLog);
+                        gles_glGetShaderInfoLog(glprogram->last_vert->id, 500, &length, tmp);
+                        SHUT_LOGD("PATCHED VERTEX SHADER COMPILE FAILED: %s\n", tmp);)
+                } else {
+                    DBG(SHUT_LOGD("Patched vertex shader compiled successfully\n"));
+                }
+            }
+        }
+    }
+    // ===================================================================
+    // === END CROSS-STAGE VARYING CONSISTENCY CHECK
+    // ===================================================================
+
     // ok, continue with linking
     LOAD_GLES2(glLinkProgram);
     if (gles_glLinkProgram) {

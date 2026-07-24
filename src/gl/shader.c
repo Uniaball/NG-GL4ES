@@ -836,27 +836,38 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     if (!isBuiltInVariableConverted) convertedSource = mark_glsl_builtin_converted(convertedSource);
                     glshader->source = strdup(convertedSource);
                     convertedSource = replace_version_line_460(convertedSource);
-                    int returnCode = 0; // TODO: handle returnCode
+                    int returnCode = 0;
                     char* result = GLSLtoGLSLES_c(convertedSource, glshader->type, globals4es.esversion, glsl_version,
                                                   &returnCode);
                     free(convertedSource);
-                    glshader->converted =
-                        strdup(result != NULL ? process_uniform_declarations(result, glshader->uniforms_declarations,
-                                                                             &glshader->uniforms_declarations_count)
-                                              : ConvertShaderConditionally(glshader));
+                    // Use SPIRV result only if conversion succeeded; fall back to FPE path otherwise
+                    if (result != NULL && returnCode >= 0) {
+                        glshader->converted =
+                            strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
+                                                                 &glshader->uniforms_declarations_count));
+                        free(result);
+                    } else {
+                        if (result) free(result);
+                        glshader->converted = strdup(ConvertShaderConditionally(glshader));
+                    }
                     glshader->converted = process_uniform_declarations(
                         glshader->converted, glshader->uniforms_declarations, &glshader->uniforms_declarations_count);
 
                     /*if (isBSL)*/ glshader->converted = bsl_patch(glshader->converted);
                     glshader->is_converted_essl_320 = 0;
                 } else {
-                    int returnCode = 0; // TODO: handle returnCode
+                    int returnCode = 0;
                     char* result = GLSLtoGLSLES_c(glshader->source, glshader->type, globals4es.esversion, glsl_version,
                                                   &returnCode);
-                    glshader->converted =
-                        strdup(result != NULL ? process_uniform_declarations(result, glshader->uniforms_declarations,
-                                                                             &glshader->uniforms_declarations_count)
-                                              : ConvertShaderConditionally(glshader));
+                    if (result != NULL && returnCode >= 0) {
+                        glshader->converted =
+                            strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
+                                                                 &glshader->uniforms_declarations_count));
+                        free(result);
+                    } else {
+                        if (result) free(result);
+                        glshader->converted = strdup(ConvertShaderConditionally(glshader));
+                    }
                     glshader->is_converted_essl_320 = 1;
                 }
             }
@@ -882,6 +893,23 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     if (temp_tex) { free(glshader->converted); glshader->converted = temp_tex; }
                 }
 
+                // Part 3.0: Add default precision for BOTH shaders (ESSL 300+ requires precision)
+                // Some GLES drivers reject vertex shaders with undeclared precision on int/float
+                if (!strstr(glshader->converted, "precision ")) {
+                    const char* precision_qualifier = "\nprecision highp float;\nprecision highp int;\n";
+                    char* temp_prec = insert_after_first(glshader->converted, "\n", precision_qualifier);
+                    if (temp_prec) { free(glshader->converted); glshader->converted = temp_prec; }
+                } else if (glshader->type == GL_VERTEX_SHADER) {
+                    // Vertex shader has partial precision — ensure int is covered
+                    if (!strstr(glshader->converted, "precision ") || 
+                        (strstr(glshader->converted, "precision ") && !strstr(glshader->converted, "precision highp int") && 
+                         !strstr(glshader->converted, "precision mediump int") && !strstr(glshader->converted, "precision lowp int"))) {
+                        const char* int_prec = "\nprecision highp int;\n";
+                        char* temp_prec2 = insert_after_first(glshader->converted, "\n", int_prec);
+                        if (temp_prec2) { free(glshader->converted); glshader->converted = temp_prec2; }
+                    }
+                }
+
                 // Part 3: Handle keywords based on shader type
                 if (glshader->type == GL_VERTEX_SHADER) {
                     // In Vertex Shaders, 'attribute' becomes 'in', and 'varying' becomes 'out'
@@ -894,8 +922,10 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                         if (temp_vout) { free(glshader->converted); glshader->converted = temp_vout; }
                     }
                 } else { // Fragment Shader
-                    // Part 3.5: Add the mandatory default precision for floats in Fragment Shaders
-                    if (!strstr(glshader->converted, "precision highp float")) {
+                    // Add default precision for floats if missing
+                    if (!strstr(glshader->converted, "precision highp float") &&
+                        !strstr(glshader->converted, "precision mediump float") &&
+                        !strstr(glshader->converted, "precision lowp float")) {
                         const char* precision_qualifier = "\nprecision highp float;\n";
                         char* temp_prec = insert_after_first(glshader->converted, "\n", precision_qualifier);
                         if (temp_prec) { free(glshader->converted); glshader->converted = temp_prec; }
@@ -921,7 +951,10 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     }
 
                     // If we need to declare our variable, do it smartly with precision
-                    if (needs_out_declaration && !strstr(glshader->converted, "out vec4 fragColor")) {
+                    if (needs_out_declaration && !strstr(glshader->converted, "out vec4 fragColor") &&
+                        !strstr(glshader->converted, "out highp vec4 fragColor") &&
+                        !strstr(glshader->converted, "out mediump vec4 fragColor") &&
+                        !strstr(glshader->converted, "out lowp vec4 fragColor")) {
                         const char* declaration = "\nout highp vec4 fragColor;\n";
                         char* temp_decl = insert_after_preamble(glshader->converted, declaration);
                         if (temp_decl) { free(glshader->converted); glshader->converted = temp_decl; }

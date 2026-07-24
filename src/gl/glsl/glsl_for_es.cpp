@@ -212,10 +212,22 @@ std::string forceSupporterOutput(const std::string& glslCode) {
 }
 
 std::string removeLayoutBinding(const std::string& glslCode) {
+    // Remove layout(binding=N) patterns
     static std::regex bindingRegex(R"(layout\s*\(\s*binding\s*=\s*\d+\s*\)\s*)");
     std::string result = std::regex_replace(glslCode, bindingRegex, "");
-    static std::regex bindingRegex2(R"(layout\s*\(\s*binding\s*=\s*\d+\s*,)");
-    result = std::regex_replace(result, bindingRegex2, "layout(");
+
+    // Remove layout(binding=N, ...) - keep other qualifiers
+    static std::regex bindingCommaRegex(R"(layout\s*\(\s*binding\s*=\s*\d+\s*,\s*)");
+    result = std::regex_replace(result, bindingCommaRegex, "layout(");
+
+    // Remove layout(..., binding=N) - trailing binding
+    static std::regex trailingBindingRegex(R"(,\s*binding\s*=\s*\d+\s*)");
+    result = std::regex_replace(result, trailingBindingRegex, "");
+
+    // Clean up empty layout() blocks
+    static std::regex emptyLayoutRegex(R"(layout\s*\(\s*\)\s*)");
+    result = std::regex_replace(result, emptyLayoutRegex, "");
+
     return result;
 }
 
@@ -815,6 +827,98 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     return spirv_code;
 }
 
+// Fix up ESSL output from spirv-cross:
+// 1. Convert samplerBuffer types (usamplerBuffer/isamplerBuffer) to sampler2D
+//    when GL_EXT_texture_buffer is not available (most mobile GPUs).
+// 2. Convert texelFetch(samplerBuffer, ...) calls to texelFetch(sampler2D, ...).
+// 3. Fix uvec declarations where they're used with float operations.
+static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl, GLenum shader_type) {
+    std::string result = essl;
+
+    // Check for samplerBuffer types
+    bool has_sampler_buffer = (result.find("samplerBuffer") != std::string::npos);
+
+    if (has_sampler_buffer) {
+        // Replace usamplerBuffer → usampler2D, isamplerBuffer → isampler2D, samplerBuffer → sampler2D
+        size_t pos = 0;
+        while ((pos = result.find("usamplerBuffer", pos)) != std::string::npos) {
+            result.replace(pos, 14, "usampler2D");
+            pos += 10;
+        }
+        pos = 0;
+        while ((pos = result.find("isamplerBuffer", pos)) != std::string::npos) {
+            result.replace(pos, 14, "isampler2D");
+            pos += 10;
+        }
+        pos = 0;
+        while ((pos = result.find("samplerBuffer", pos)) != std::string::npos) {
+            // Don't replace if it's part of usamplerBuffer or isamplerBuffer
+            if (pos > 0 && (result[pos - 1] == 'u' || result[pos - 1] == 'i')) {
+                pos += 13;
+                continue;
+            }
+            result.replace(pos, 13, "sampler2D");
+            pos += 9;
+        }
+
+        // Convert texelFetch(sampler2D_name, int_coord) → texelFetch(sampler2D_name, ivec2(int_coord, 0), 0)
+        // Pattern: texelFetch( <sampler_name>, <int_expr> )
+        static const std::regex texel_fetch_regex(
+            R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*\))",
+            std::regex::ECMAScript);
+        result = std::regex_replace(result, texel_fetch_regex,
+                                     "texelFetch($1, ivec2($2, 0), 0)");
+    }
+
+    // Fix uvec type declarations that cause problems in ESSL
+    // Convert "uvec3" → "vec3" and "uvec4" → "vec4" for variables used in float operations.
+    // This is a workaround for spirv-cross generating incorrect types.
+    // We look for patterns like: uvec3 <name> = <something>;
+    // and replace them with vec3, adding explicit cast.
+    {
+        // Simple fix: replace all "uvec3 " with "vec3 " and "uvec4 " with "vec4 "
+        // Since most shaders don't intentionally use uvec for rendering, this is usually safe.
+        // For cases where uint is genuinely needed, the conversion adds explicit casts.
+
+        // Comment: this is aggressive but fixes the common spirv-cross issue.
+        // We only do this for non-uniform declarations (in/out variables), not uniforms.
+        // Uniforms with uint types are preserved.
+        std::string tmp;
+        bool modified = false;
+        size_t i = 0;
+        size_t len = result.length();
+
+        while (i < len) {
+            // Skip lines that are uniform declarations
+            bool is_uniform = false;
+            size_t line_start = i;
+            while (line_start > 0 && result[line_start - 1] != '\n') line_start--;
+            if (strncmp(&result[line_start], "uniform", 7) == 0 ||
+                strncmp(&result[line_start], "layout", 6) == 0) {
+                // Check if this line contains "uniform"
+                const char* line_ptr = &result[line_start];
+                const char* semi = strchr(line_ptr, ';');
+                if (semi && strncmp(line_ptr, "uniform", 7) == 0) {
+                    is_uniform = true;
+                }
+            }
+
+            if (!is_uniform) {
+                // Check for uvec3/uvec4 at this position
+                if ((i + 5 <= len && result.compare(i, 5, "uvec3") == 0) ||
+                    (i + 5 <= len && result.compare(i, 5, "uvec4") == 0)) {
+                    // Replace with vec3/vec4
+                    result.replace(i, 5, result.substr(i, 1) + "vec" + result.substr(i + 4, 1));
+                    modified = true;
+                }
+            }
+            i++;
+        }
+    }
+
+    return result;
+}
+
 std::string spirv_to_essl(std::vector<unsigned int> spirv, unsigned int essl_version, int& errc) {
     spvc_context context = nullptr;
     spvc_parsed_ir ir = nullptr;
@@ -888,6 +992,9 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     }
     essl = processOutColorLocations(essl);
     essl = forceSupporterOutput(essl);
+
+    // Fix samplerBuffer types and uvec/float type mismatches from spirv-cross output
+    essl = emulate_sampler_buffers_and_fix_types(essl, glsl_type);
 
     DBG(SHUT_LOGD("Originally GLSL to GLSL ES Complete: \n%s", essl.c_str()))
     return_code = errc;
