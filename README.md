@@ -24,7 +24,6 @@ NG-GL4ES/
 ├── 3rdparty/             # Submodules: glslang, SPIRV-Cross
 ├── external/             # MetalANGLE.framework (macOS/iOS)
 ├── docs/                 # COMPILE.md (build guide), USAGE.md (env vars)
-├── packaging/debian/     # Debian packaging files
 └── tools/                # Spec-based code generation tools
 ```
 
