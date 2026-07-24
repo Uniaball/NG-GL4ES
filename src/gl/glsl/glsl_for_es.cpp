@@ -752,18 +752,22 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
 
     // Convert samplerBuffer types to sampler2D BEFORE glslang/SPIRV compilation.
     // glslang rejects samplerBuffer without GL_EXT_texture_buffer, but sampler2D
-    // is always valid. The emulate_sampler_buffers_and_fix_types post-processing
-    // will handle texelFetch() coordinate rewriting after spirv-cross.
+    // is always valid. We also rewrite texelFetch() from 1D to 2D coords so
+    // glslang sees valid sampler2D call syntax (texelFetch(sampler2D, int) is
+    // invalid — it needs ivec2 and a LOD parameter).
     {
+        int converted = 0;
         size_t pos = 0;
         while ((pos = ret.find("usamplerBuffer", pos)) != std::string::npos) {
             ret.replace(pos, 14, "usampler2D");
             pos += 10;
+            converted = 1;
         }
         pos = 0;
         while ((pos = ret.find("isamplerBuffer", pos)) != std::string::npos) {
             ret.replace(pos, 14, "isampler2D");
             pos += 10;
+            converted = 1;
         }
         pos = 0;
         while ((pos = ret.find("samplerBuffer", pos)) != std::string::npos) {
@@ -773,6 +777,16 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
             }
             ret.replace(pos, 13, "sampler2D");
             pos += 9;
+            converted = 1;
+        }
+        if (converted) {
+            // Rewrite texelFetch(sampler, int) → texelFetch(sampler, ivec2(int, 0), 0)
+            // so glslang accepts the 2D sampler call syntax.
+            static const std::regex texel_fetch_pre_rx(
+                R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*\))",
+                std::regex::ECMAScript);
+            ret = std::regex_replace(ret, texel_fetch_pre_rx,
+                                      "texelFetch($1, ivec2($2, 0), 0)");
         }
     }
 

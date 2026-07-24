@@ -1099,6 +1099,18 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                         }
                                     }
                                     // Append to vertex shader converted source
+                                    // Defensive: skip if this exact declaration (or variable name)
+                                    // already exists — the out-search above may miss formatting variants.
+                                    {
+                                        char name_check[256];
+                                        snprintf(name_check, sizeof(name_check), " %s;", vname);
+                                        if (strstr(glprogram->last_vert->converted, out_decl) ||
+                                            strstr(glprogram->last_vert->converted, name_check)) {
+                                            SHUT_LOGD("[program] Skipping duplicate varying patch: %s\n", out_decl);
+                                            free(out_decl);
+                                            continue;
+                                        }
+                                    }
                                     size_t vs_orig_len = strlen(glprogram->last_vert->converted);
                                     size_t out_decl_len = strlen(out_decl);
                                     char* new_vs = (char*)malloc(vs_orig_len + out_decl_len + 4);
