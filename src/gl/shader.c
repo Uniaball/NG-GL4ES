@@ -850,17 +850,18 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                             strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
                                                                  &glshader->uniforms_declarations_count));
                         free(result);
+                        glshader->is_converted_essl_320 = 1;
                     } else {
                         SHUT_LOGD("[shader] SPIRV path FAILED (result=%p returnCode=%d), falling back to FPE path\n",
                                        (void*)result, returnCode);
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
+                        glshader->is_converted_essl_320 = 0;
                     }
                     glshader->converted = process_uniform_declarations(
                         glshader->converted, glshader->uniforms_declarations, &glshader->uniforms_declarations_count);
 
                     /*if (isBSL)*/ glshader->converted = bsl_patch(glshader->converted);
-                    glshader->is_converted_essl_320 = 0;
                 } else {
                     int returnCode = 0;
                     char* result = GLSLtoGLSLES_c(glshader->source, glshader->type, globals4es.esversion, glsl_version,
@@ -871,13 +872,14 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                             strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
                                                                  &glshader->uniforms_declarations_count));
                         free(result);
+                        glshader->is_converted_essl_320 = 1;
                     } else {
                         SHUT_LOGD("[shader] SPIRV path(bare) FAILED (result=%p returnCode=%d), fallback FPE\n",
                                        (void*)result, returnCode);
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
+                        glshader->is_converted_essl_320 = 0;
                     }
-                    glshader->is_converted_essl_320 = 1;
                 }
             }
             DBG(SHUT_LOGD("\n[INFO] [Shader] Converted Shader source: \n%s", glshader->converted))
