@@ -8,7 +8,6 @@
 // #define DEBUG
 #ifdef DEBUG
 #include <stdio.h>
-#include "logs.h"  // SHUT_LOGD used by ARBCONV_DBG* macros below
 
 // ARBCONV_DBG - general ArbConverter debug logs
 #define ARBCONV_DBG(a) a
