@@ -907,8 +907,8 @@ static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl
                 // Check for uvec3/uvec4 at this position
                 if ((i + 5 <= len && result.compare(i, 5, "uvec3") == 0) ||
                     (i + 5 <= len && result.compare(i, 5, "uvec4") == 0)) {
-                    // Replace with vec3/vec4
-                    result.replace(i, 5, result.substr(i, 1) + "vec" + result.substr(i + 4, 1));
+                    // Replace "uvec3" → "vec3", "uvec4" → "vec4"
+                    result.replace(i, 5, std::string("vec") + result[i + 4]);
                     modified = true;
                 }
             }

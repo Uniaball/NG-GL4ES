@@ -1083,13 +1083,20 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                                 if (out_decl) {
                                     strncpy(out_decl, decl_start, decl_len);
                                     out_decl[decl_len] = '\0';
-                                    // Replace "in " with "out " at the beginning
-                                    // Find the "in" keyword
+                                    // Replace "in " with "out " — "out " is 4 chars vs 3 for "in "
                                     char* in_kw = strstr(out_decl, "in ");
                                     if (in_kw) {
-                                        in_kw[0] = 'o';
-                                        in_kw[1] = 'u';
-                                        in_kw[2] = 't';
+                                        size_t prefix = in_kw - out_decl;
+                                        size_t rest = strlen(out_decl + prefix + 3);
+                                        // Shift rest right by 1 to make room, then write "out "
+                                        char* out_str = (char*)malloc(decl_len + 2);
+                                        if (out_str) {
+                                            strncpy(out_str, out_decl, prefix);
+                                            strcpy(out_str + prefix, "out ");
+                                            strcpy(out_str + prefix + 4, out_decl + prefix + 3);
+                                            free(out_decl);
+                                            out_decl = out_str;
+                                        }
                                     }
                                     // Append to vertex shader converted source
                                     size_t vs_orig_len = strlen(glprogram->last_vert->converted);

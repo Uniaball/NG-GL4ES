@@ -823,6 +823,9 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                         convertedSource = ConvertShaderBuiltInVariableOnly(
                             convertedSource, glshader->type == GL_VERTEX_SHADER ? 1 : 0, &glshader->need,
                             isBuiltInVariableConverted ? 0 : 1);
+                    // If built-in variables were already converted, take ownership before freeing
+                    if (isBuiltInVariableConverted)
+                        convertedSource = strdup(convertedSource);
                     free(glshader->source);
                     if (glshader->type == GL_FRAGMENT_SHADER) {
                         if (contains_glFragColor(glshader->source)) {
