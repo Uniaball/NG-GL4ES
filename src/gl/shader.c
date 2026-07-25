@@ -711,19 +711,6 @@ char* bsl_patch(const char* glsl) {
         bsl_patch_dump_line(glsl, "isGlowing");
     }
 
-    // TEMP(debug): A/B test — bypass all bsl_patch rewrites (string replaces +
-    // the quality[/vgpu_FragData1 injection below) and return the source
-    // untouched. If the BSL v10.1.3 black screen disappears with this bypass,
-    // bsl_patch itself is the culprit (most likely the vgpu_FragData1=color
-    // injection corrupting the temporal/aux attachment); if it persists, the
-    // patch was a no-op on v10.1.3 and the divergence comes from elsewhere.
-    // Remove this early-return to restore the legacy patch behavior.
-    {
-        char* passthrough = (char*)malloc(strlen(glsl) + 1);
-        if (passthrough) memcpy(passthrough, glsl, strlen(glsl) + 1);
-        return passthrough;
-    }
-
     const char* old1 = "cloudBlendOpacity = step(viewLength, cloudViewLength);";
     const char* new1 = "cloudBlendOpacity = 0.7;";
     const char* old2 = "vgpu_FragData1 = vec4(temporalData, temporalColor);";
