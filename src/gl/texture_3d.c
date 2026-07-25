@@ -75,8 +75,13 @@ void APIENTRY_GL4ES gl4es_glTexImage3D(GLenum target, GLint level, GLint interna
         type = GL_UNSIGNED_INT;
     }
     if (internalformat == GL_RGBA16) {
-        internalformat = GL_RGBA16F;
-        type = GL_FLOAT;
+        if (hardext.norm16) {
+            // Keep native normalized RGBA16 (clamped stores, no NaN/Inf).
+            type = GL_UNSIGNED_SHORT;
+        } else {
+            internalformat = GL_RGBA16F;
+            type = GL_FLOAT;
+        }
 #ifdef GL_RGBA16_SNORM
     } else if (internalformat == GL_RGBA16_SNORM) {
         internalformat = GL_RGBA;

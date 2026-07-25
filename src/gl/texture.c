@@ -151,8 +151,15 @@ void internal_convert(GLenum* internal_format, GLenum* type, GLenum* format) {
         if (type) *type = GL_INT;
         break;
     case GL_RGBA16: {
-        *internal_format = GL_RGBA16F;
-        if (type) *type = GL_FLOAT;
+        if (hardext.norm16) {
+            // Native normalized 16-bit is supported: keep RGBA16 so stores are
+            // clamped to [0,1] (NaN/Inf cannot be written), matching desktop GL
+            // semantics. Critical for shaderpack temporal/accumulation buffers.
+            if (type) *type = GL_UNSIGNED_SHORT;
+        } else {
+            *internal_format = GL_RGBA16F;
+            if (type) *type = GL_FLOAT;
+        }
         break;
     }
     case GL_RGBA8:
@@ -164,10 +171,17 @@ void internal_convert(GLenum* internal_format, GLenum* type, GLenum* format) {
         if (type) *type = GL_HALF_FLOAT;
         break;
     case GL_R16:
-        *internal_format = GL_R16F;
-        if (type) *type = GL_FLOAT;
+        if (hardext.norm16) {
+            if (type) *type = GL_UNSIGNED_SHORT;
+            if (format) *format = GL_RED;
+        } else {
+            *internal_format = GL_R16F;
+            if (type) *type = GL_FLOAT;
+        }
         break;
     case GL_RGB16:
+        // Note: RGB16 stays on 16F even with norm16 (RGB16 is not
+        // color-renderable under GL_EXT_texture_norm16).
         *internal_format = GL_RGB16F;
         if (type) *type = GL_HALF_FLOAT;
         if (format) *format = GL_RGB;
@@ -177,9 +191,14 @@ void internal_convert(GLenum* internal_format, GLenum* type, GLenum* format) {
         if (format) *format = GL_RGB;
         break;
     case GL_RG16:
-        *internal_format = GL_RG16F;
-        if (type) *type = GL_HALF_FLOAT;
-        if (format) *format = GL_RG;
+        if (hardext.norm16) {
+            if (type) *type = GL_UNSIGNED_SHORT;
+            if (format) *format = GL_RG;
+        } else {
+            *internal_format = GL_RG16F;
+            if (type) *type = GL_HALF_FLOAT;
+            if (format) *format = GL_RG;
+        }
         break;
         // Inline R and RG channel mappings
     case GL_R8:
@@ -345,8 +364,13 @@ void internal2format_type(GLenum* internalformat, GLenum* format, GLenum* type) 
         if (type) *type = GL_INT;
         break;
     case GL_RGBA16: {
-        *internalformat = GL_RGBA16F;
-        if (type) *type = GL_FLOAT;
+        if (hardext.norm16) {
+            // Keep native normalized RGBA16 (clamped stores, no NaN/Inf).
+            if (type) *type = GL_UNSIGNED_SHORT;
+        } else {
+            *internalformat = GL_RGBA16F;
+            if (type) *type = GL_FLOAT;
+        }
         break;
     }
     case GL_RGBA8:
@@ -358,10 +382,16 @@ void internal2format_type(GLenum* internalformat, GLenum* format, GLenum* type) 
         if (type) *type = GL_HALF_FLOAT;
         break;
     case GL_R16:
-        *internalformat = GL_R16F;
-        if (type) *type = GL_FLOAT;
+        if (hardext.norm16) {
+            if (type) *type = GL_UNSIGNED_SHORT;
+            if (format) *format = GL_RED;
+        } else {
+            *internalformat = GL_R16F;
+            if (type) *type = GL_FLOAT;
+        }
         break;
     case GL_RGB16:
+        // Note: RGB16 stays on 16F even with norm16 (not color-renderable).
         *internalformat = GL_RGB16F;
         if (type) *type = GL_HALF_FLOAT;
         if (format) *format = GL_RGB;
@@ -371,9 +401,14 @@ void internal2format_type(GLenum* internalformat, GLenum* format, GLenum* type) 
         if (format) *format = GL_RGB;
         break;
     case GL_RG16:
-        *internalformat = GL_RG16F;
-        if (type) *type = GL_HALF_FLOAT;
-        if (format) *format = GL_RG;
+        if (hardext.norm16) {
+            if (type) *type = GL_UNSIGNED_SHORT;
+            if (format) *format = GL_RG;
+        } else {
+            *internalformat = GL_RG16F;
+            if (type) *type = GL_HALF_FLOAT;
+            if (format) *format = GL_RG;
+        }
         break;
         // Inline R and RG channel mappings
     case GL_R8:
@@ -1370,8 +1405,13 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
         type = GL_UNSIGNED_INT;
     }
     if (internalformat == GL_RGBA16) {
-        internalformat = GL_RGBA16F;
-        type = GL_FLOAT;
+        if (hardext.norm16) {
+            // Keep native normalized RGBA16 (clamped stores, no NaN/Inf).
+            type = GL_UNSIGNED_SHORT;
+        } else {
+            internalformat = GL_RGBA16F;
+            type = GL_FLOAT;
+        }
     } else if (internalformat == GL_RGBA16_SNORM) {
         internalformat = GL_RGBA;
     }

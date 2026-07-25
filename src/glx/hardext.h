@@ -37,6 +37,7 @@ typedef struct _hardext {
     int cubemap;      // GL_OES_texture_cube_map
     int drawtex;      // GL_OES_draw_texture
     int rgtex;        // GL_EXT_texture_rg
+    int norm16;       // GL_EXT_texture_norm16 (native RGBA16/R16/RG16 normalized formats)
     int floattex;     // GL_OES_texture_float
     int halffloattex; // GL_OES_texture_half_float
     int floatfbo;     // GL_EXT_color_buffer_float

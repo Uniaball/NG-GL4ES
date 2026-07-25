@@ -367,6 +367,7 @@ void GetHardwareExtensions(int notest) {
     }
     S("GL_OES_draw_texture ", drawtex, 1);
     S("GL_EXT_texture_rg ", rgtex, 1);
+    S("GL_EXT_texture_norm16 ", norm16, 1);
     if (globals4es.floattex) {
         S("GL_OES_texture_float ", floattex, 1);
         S("GL_OES_texture_half_float ", halffloattex, 1);
