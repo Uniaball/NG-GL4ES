@@ -675,8 +675,41 @@ static char* insert_after_first(const char* src, const char* anchor, const char*
     return out;
 }
 
+// TEMP(debug): print the full source line that contains `token`, so we can
+// capture the exact wording used by the current BSL version. Remove together
+// with the bsl_patch diagnostic below once the black-screen root cause is fixed.
+static void bsl_patch_dump_line(const char* src, const char* token) {
+    const char* p = strstr(src, token);
+    if (!p) return;
+    const char* start = p;
+    while (start > src && start[-1] != '\n') start--;
+    const char* end = p;
+    while (*end && *end != '\n') end++;
+    SHUT_LOGD("[bsl_patch] line[%s]: %.*s\n", token, (int)(end - start), start);
+}
+
 char* bsl_patch(const char* glsl) {
     if (!glsl) return NULL;
+
+    // TEMP(debug): report whether the version-locked BSL patch strings still
+    // match this shaderpack. If a pattern is not found, replace_all() silently
+    // no-ops and the corresponding temporal/volumetric/bloom pass runs
+    // unmodified -> divergence -> growing black region -> full black screen.
+    if (globals4es.logshader &&
+        (strstr(glsl, "cloudBlendOpacity") || strstr(glsl, "colortex") ||
+         strstr(glsl, "temporalColor") || strstr(glsl, "vgpu_FragData1"))) {
+        SHUT_LOGD("[bsl_patch] match: cloud=%d temporal=%d vl=%d bloom=%d glow=%d\n",
+                  strstr(glsl, "cloudBlendOpacity = step(viewLength, cloudViewLength);") != NULL,
+                  strstr(glsl, "vgpu_FragData1 = vec4(temporalData, temporalColor);") != NULL,
+                  strstr(glsl, "vgpu_FragData1 = vec4(vl, 1.0);") != NULL,
+                  strstr(glsl, "highp vec3 bloom = texture(colortex1, ((coord / vec2(scale)) + offset) * resScale).xyz;") != NULL,
+                  strstr(glsl, "highp float isGlowing = texture(colortex3, texCoord).z;") != NULL);
+        bsl_patch_dump_line(glsl, "cloudBlendOpacity");
+        bsl_patch_dump_line(glsl, "temporalColor");
+        bsl_patch_dump_line(glsl, "= vec4(vl");
+        bsl_patch_dump_line(glsl, "bloom = texture");
+        bsl_patch_dump_line(glsl, "isGlowing");
+    }
 
     const char* old1 = "cloudBlendOpacity = step(viewLength, cloudViewLength);";
     const char* new1 = "cloudBlendOpacity = 0.7;";
