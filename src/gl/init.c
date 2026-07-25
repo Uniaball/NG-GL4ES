@@ -694,6 +694,9 @@ void initialize_gl4es() {
     }
 
     env(LIBGL_LOGSHADERERROR, globals4es.logshader, "Log errors compiling shaders to the console");
+    // TEMP(debug): force shader compile/link error logging ON without needing an env var.
+    // Remove this line once the BSL black-screen root cause is found.
+    globals4es.logshader = 1;
     env(LIBGL_SHADERNOGLES, globals4es.shadernogles, "Remove GLES part in shader");
     env(LIBGL_NOES2COMPAT, globals4es.noes2, "Don't expose GLX_EXT_create_context_es2_profile extension");
     env(LIBGL_NORMALIZE, globals4es.normalize, "Force normals to be normalized on FPE shaders");
