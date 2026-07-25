@@ -980,9 +980,14 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                     // translation: the missing output is simply unused. When
                     // ignore_link_error is set, report LINK_STATUS=GL_TRUE for this
                     // specific failure so the caller does not abort. Mirrors MobileGlues'
-                    // "Now try to cheat." path.
+                    // "Now try to cheat." path. ANGLE (Vulkan-backed) reports the
+                    // same benign cross-stage mismatch as e.g.
+                    // "FRAGMENT varying Color does not match any VERTEX varying",
+                    // so also catch that wording.
                     if (globals4es.ignore_link_error &&
-                        strstr(log_chars, "not declared in output from previous stage")) {
+                        (strstr(log_chars, "not declared in output from previous stage") ||
+                         (strstr(log_chars, "varying") &&
+                          strstr(log_chars, "does not match any")))) {
                         DBG(SHUT_LOGD("Benign cross-stage varying mismatch; reporting LINK_STATUS=GL_TRUE.\n"));
                         free(log_chars);
                         glprogram->linked = 1;
