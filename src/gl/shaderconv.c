@@ -1047,7 +1047,8 @@ char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t* need, i
     int wanthighp = !fpeShader;
     if (wanthighp && !hardext.highp) wanthighp = 0;
     int versionHeader = 0;
-    printf("version string: %s", versionString);
+    if ((globals4es.dbgshaderconv & maskbefore) == maskbefore)
+        printf("version string: %s\n", versionString);
     if (versionString && (strcmp(versionString, "120") == 0 || strcmp(versionString, "110") == 0 ||
                           strstr(versionString, "150") != NULL))
         version120 = forwardPort ? 1 : 0;

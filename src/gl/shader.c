@@ -128,23 +128,20 @@ void APIENTRY_GL4ES gl4es_glCompileShader(GLuint shader) {
     if (gles_glCompileShader) {
         gles_glCompileShader(glshader->id);
         errorGL();
-        // if(globals4es.logshader) {
-        { // always log the error of shader
+        { // log shader compile errors at runtime when LIBGL_LOGSHADERERROR is set
             // get compile status and print shaders sources if compile fail...
             LOAD_GLES2(glGetShaderiv);
             LOAD_GLES2(glGetShaderInfoLog);
             GLint status = 0;
             gles_glGetShaderiv(glshader->id, GL_COMPILE_STATUS, &status);
-            if (status != GL_TRUE) {
-                DBG({
-                    char tmp[500];
-                    GLint length;
-                    gles_glGetShaderInfoLog(glshader->id, 500, &length, tmp);
-                    SHUT_LOGD("LIBGL: Error while compiling shader %d. Original source is:\n%s\n=======\n",
-                                  glshader->id, glshader->source);
-                    SHUT_LOGD("ShaderConv Source is:\n%s\n=======\n", glshader->converted);
-                    SHUT_LOGD("Compiler message is\n%s\nLIBGL: End of Error log\n", tmp);
-                })
+            if (status != GL_TRUE && globals4es.logshader) {
+                char tmp[500];
+                GLint length;
+                gles_glGetShaderInfoLog(glshader->id, 500, &length, tmp);
+                SHUT_LOGD("LIBGL: Error while compiling shader %d (type=0x%04X). Original source is:\n%s\n=======\n",
+                              glshader->id, glshader->type, glshader->source);
+                SHUT_LOGD("ShaderConv Source is:\n%s\n=======\n", glshader->converted);
+                SHUT_LOGD("Compiler message is\n%s\nLIBGL: End of Error log\n", tmp);
             }
         }
     } else

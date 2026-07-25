@@ -974,6 +974,9 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                 if (log_chars && gles_glGetProgramInfoLog) {
                     gles_glGetProgramInfoLog(glprogram->id, log_length, &log_length, log_chars);
                     DBG(SHUT_LOGD("%s", log_chars));
+                    if (globals4es.logshader)
+                        SHUT_LOGD("LIBGL: Program %d link error (before cheat):\n%s\nLIBGL: End of link error\n",
+                                  program, log_chars);
                     // Some drivers reject a program whose fragment shader declares a
                     // varying that the vertex shader does not output ("not declared in
                     // output from previous stage"). This mismatch is benign for our
