@@ -809,8 +809,8 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     TBuiltInResource TBuiltInResource_resources = InitResources();
 
     if (!shader.parse(&TBuiltInResource_resources, glsl_version, true, EShMsgDefault)) {
-        SHUT_LOGD("[glsl-for-es] glslang compile ERROR: %s\n", shader.getInfoLog());
-        SHUT_LOGD("[glsl-for-es] glslang debug: %s\n", shader.getInfoDebugLog());
+        DBG(SHUT_LOGD("[glsl-for-es] glslang compile ERROR: %s\n", shader.getInfoLog()));
+        DBG(SHUT_LOGD("[glsl-for-es] glslang debug: %s\n", shader.getInfoDebugLog()));
         errc = -1;
         return {};
     }
@@ -819,8 +819,8 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     program.addShader(&shader);
 
     if (!program.link(EShMsgDefault)) {
-        SHUT_LOGD("[glsl-for-es] glslang link ERROR: %s\n", program.getInfoLog());
-        SHUT_LOGD("[glsl-for-es] glslang link debug: %s\n", program.getInfoDebugLog());
+        DBG(SHUT_LOGD("[glsl-for-es] glslang link ERROR: %s\n", program.getInfoLog()));
+        DBG(SHUT_LOGD("[glsl-for-es] glslang link debug: %s\n", program.getInfoDebugLog()));
         errc = -1;
         return {};
     }
@@ -832,95 +832,6 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     return spirv_code;
 }
 
-// Fix up ESSL output from spirv-cross:
-// 1. Convert samplerBuffer types (usamplerBuffer/isamplerBuffer) to sampler2D
-//    when GL_EXT_texture_buffer is not available (most mobile GPUs).
-// 2. Convert texelFetch(samplerBuffer, ...) calls to texelFetch(sampler2D, ...).
-// 3. Fix uvec declarations where they're used with float operations.
-static std::string emulate_sampler_buffers_and_fix_types(const std::string& essl, GLenum shader_type) {
-    std::string result = essl;
-
-    // Check for samplerBuffer types
-    bool has_sampler_buffer = (result.find("samplerBuffer") != std::string::npos);
-
-    if (has_sampler_buffer) {
-        SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: found samplerBuffer types, converting to sampler2D\n");
-
-        // Replace usamplerBuffer → usampler2D, isamplerBuffer → isampler2D, samplerBuffer → sampler2D
-        size_t pos = 0;
-        while ((pos = result.find("usamplerBuffer", pos)) != std::string::npos) {
-            result.replace(pos, 14, "usampler2D");
-            pos += 10;
-        }
-        pos = 0;
-        while ((pos = result.find("isamplerBuffer", pos)) != std::string::npos) {
-            result.replace(pos, 14, "isampler2D");
-            pos += 10;
-        }
-        pos = 0;
-        while ((pos = result.find("samplerBuffer", pos)) != std::string::npos) {
-            // Don't replace if it's part of usamplerBuffer or isamplerBuffer
-            if (pos > 0 && (result[pos - 1] == 'u' || result[pos - 1] == 'i')) {
-                pos += 13;
-                continue;
-            }
-            result.replace(pos, 13, "sampler2D");
-            pos += 9;
-        }
-
-        // Convert texelFetch(sampler2D_name, int_coord) / texelFetch(sampler2D_name, int_coord, 0)
-        // → texelFetch(sampler2D_name, ivec2(int_coord, 0), 0)
-        static const std::regex texel_fetch_regex(
-            R"(texelFetch\s*\(\s*(\w+)\s*,\s*([^,)]+)\s*(?:,\s*0\s*)?\s*\))",
-            std::regex::ECMAScript);
-        result = std::regex_replace(result, texel_fetch_regex,
-                                     "texelFetch($1, ivec2($2, 0), 0)");
-    }
-
-        // Fix uvec→vec type mismatches from spirv-cross output for samplerBuffer
-        // shaders ONLY. spirv-cross sometimes produces uvec3/uvec4 in ESSL when
-        // converting SPIRV from samplerBuffer-based shaders. These uvec types get
-        // used with float operations, causing compile errors (e.g. uvec3*float).
-        //
-        // IMPORTANT: this is gated by has_sampler_buffer. Non-samplerBuffer
-        // shaders (e.g. Sodium block_layer in MC 1.21.1) may LEGITIMATELY use
-        // uvec for bitwise ops (>>, &, |). Replacing uvec→vec in those shaders
-        // produces vec3>>vec3 which the GPU driver rejects.
-        if (has_sampler_buffer) {
-            size_t i = 0;
-            int uvec_replaced = 0;
-
-            while (i < result.length()) {
-                // Skip lines that are uniform declarations
-                bool is_uniform = false;
-                size_t line_start = i;
-                while (line_start > 0 && result[line_start - 1] != '\n') line_start--;
-                if (strncmp(&result[line_start], "uniform", 7) == 0 ||
-                    strncmp(&result[line_start], "layout", 6) == 0) {
-                    const char* line_ptr = &result[line_start];
-                    const char* semi = strchr(line_ptr, ';');
-                    if (semi && strncmp(line_ptr, "uniform", 7) == 0) {
-                        is_uniform = true;
-                    }
-                }
-
-                if (!is_uniform) {
-                    size_t cur_len = result.length();
-                    if (i + 5 <= cur_len && (result.compare(i, 5, "uvec3") == 0 ||
-                                              result.compare(i, 5, "uvec4") == 0)) {
-                        result.replace(i, 5, std::string("vec") + result[i + 4]);
-                        uvec_replaced++;
-                    }
-                }
-                i++;
-            }
-            if (uvec_replaced > 0) {
-                SHUT_LOGD("[glsl-for-es] emulate_sampler_buffers: replaced %d uvec3/uvec4 occurrences\n", uvec_replaced);
-            }
-        }
-
-    return result;
-}
 
 std::string spirv_to_essl(std::vector<unsigned int> spirv, unsigned int essl_version, int& errc) {
     spvc_context context = nullptr;
@@ -965,15 +876,10 @@ std::string spirv_to_essl(std::vector<unsigned int> spirv, unsigned int essl_ver
 static bool glslang_inited = false;
 std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int essl_version, int& return_code) {
     bool atomicCounterEmulated = false;
-    const char* shader_type_name = (glsl_type == GL_VERTEX_SHADER) ? "VS" :
-                                    (glsl_type == GL_FRAGMENT_SHADER) ? "FS" : "OTHER";
-    bool has_sbuf = (strstr(glsl_code, "samplerBuffer") != NULL);
-    SHUT_LOGD("[glsl-for-es] GLSLtoGLSLES_2 entry: type=%s src_len=%zu has_samplerBuffer=%d\n",
-                   shader_type_name, strlen(glsl_code), has_sbuf);
 
     std::string correct_glsl_str = preprocess_glsl(glsl_code, glsl_type, &atomicCounterEmulated);
     int glsl_version = get_or_add_glsl_version(correct_glsl_str);
-    SHUT_LOGD("[glsl-for-es] glsl_version=%d essl_target=%d\n", glsl_version, essl_version);
+    DBG(SHUT_LOGD("[glsl-for-es] glsl_version=%d essl_target=%d\n", glsl_version, essl_version));
 
     if (!glslang_inited) {
         glslang::InitializeProcess();
@@ -984,15 +890,15 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     std::vector<unsigned int> spirv_code = glsl_to_spirv(glsl_type, glsl_version, s, errc);
     if (errc != 0) {
         return_code = -1;
-        SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc);
+        DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc));
         return "";
     }
-    SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size());
+    DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size()));
     errc = 0;
     std::string essl = spirv_to_essl(spirv_code, essl_version, errc);
     if (errc != 0) {
         return_code = -2;
-        SHUT_LOGD("[glsl-for-es] spirv_to_essl FAILED: errc=%d\n", errc);
+        DBG(SHUT_LOGD("[glsl-for-es] spirv_to_essl FAILED: errc=%d\n", errc));
         return "";
     }
 

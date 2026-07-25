@@ -231,10 +231,10 @@ void initialize_gl4es() {
 
     globals4es.use_mc_color = ReturnEnvVarInt("LIBGL_USE_MC_COLOR");
 
-    // Cheat: report LINK_STATUS=GL_TRUE for benign cross-stage varying-mismatch
-    // link errors (e.g. "input X not declared in output from previous stage").
-    // Default ON, matching MobileGlues' ignore_error behaviour. Set
-    // LIBGL_IGNORE_LINK_ERROR=0 to disable.
+    // Report LINK_STATUS=GL_TRUE for benign cross-stage varying-mismatch link
+    // errors (e.g. "input X not declared in output from previous stage"). Default
+    // ON, matching MobileGlues' ignore_error behaviour. Set LIBGL_IGNORE_LINK_ERROR=0
+    // to disable.
     GetEnvVarBool("LIBGL_IGNORE_LINK_ERROR", &globals4es.ignore_link_error, 1);
 
 #define SET_CONFIG_INT(name) globals4es.name = config_get_int(#name)

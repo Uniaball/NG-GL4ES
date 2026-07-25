@@ -974,13 +974,16 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                 if (log_chars && gles_glGetProgramInfoLog) {
                     gles_glGetProgramInfoLog(glprogram->id, log_length, &log_length, log_chars);
                     DBG(SHUT_LOGD("%s", log_chars));
-                    // Cheat: swallow benign cross-stage varying-mismatch link errors
-                    // so the caller (e.g. Minecraft AsyncParticles) believes linking
-                    // succeeded and doesn't abort the process. Mirrors MobileGlues'
-                    // "Now try to cheat." behaviour.
+                    // Some drivers reject a program whose fragment shader declares a
+                    // varying that the vertex shader does not output ("not declared in
+                    // output from previous stage"). This mismatch is benign for our
+                    // translation: the missing output is simply unused. When
+                    // ignore_link_error is set, report LINK_STATUS=GL_TRUE for this
+                    // specific failure so the caller does not abort. Mirrors MobileGlues'
+                    // "Now try to cheat." path.
                     if (globals4es.ignore_link_error &&
                         strstr(log_chars, "not declared in output from previous stage")) {
-                        DBG(SHUT_LOGD("Now try to cheat (benign varying mismatch). Reporting LINK_STATUS=GL_TRUE.\n"));
+                        DBG(SHUT_LOGD("Benign cross-stage varying mismatch; reporting LINK_STATUS=GL_TRUE.\n"));
                         free(log_chars);
                         glprogram->linked = 1;
                         noerrorShimNoPurge();

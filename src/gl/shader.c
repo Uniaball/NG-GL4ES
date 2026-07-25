@@ -136,13 +136,15 @@ void APIENTRY_GL4ES gl4es_glCompileShader(GLuint shader) {
             GLint status = 0;
             gles_glGetShaderiv(glshader->id, GL_COMPILE_STATUS, &status);
             if (status != GL_TRUE) {
-                SHUT_LOGD("LIBGL: Error while compiling shader %d. Original source is:\n%s\n=======\n",
-                              glshader->id, glshader->source);
-                SHUT_LOGD("ShaderConv Source is:\n%s\n=======\n", glshader->converted);
-                char tmp[500];
-                GLint length;
-                gles_glGetShaderInfoLog(glshader->id, 500, &length, tmp);
-                SHUT_LOGD("Compiler message is\n%s\nLIBGL: End of Error log\n", tmp);
+                DBG({
+                    char tmp[500];
+                    GLint length;
+                    gles_glGetShaderInfoLog(glshader->id, 500, &length, tmp);
+                    SHUT_LOGD("LIBGL: Error while compiling shader %d. Original source is:\n%s\n=======\n",
+                                  glshader->id, glshader->source);
+                    SHUT_LOGD("ShaderConv Source is:\n%s\n=======\n", glshader->converted);
+                    SHUT_LOGD("Compiler message is\n%s\nLIBGL: End of Error log\n", tmp);
+                })
             }
         }
     } else
@@ -814,7 +816,7 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                 // through the SPIRV path instead of falling back to FPE.
                 int ver = getGLSLVersion(glshader->source);
                 if (ver < 140) {
-                    SHUT_LOGD("[shader] No #version in source, prepending #version 330 compatibility\n");
+                    DBG(SHUT_LOGD("[shader] No #version in source, prepending #version 330 compatibility\n"));
                     const char* prefix = "#version 330 compatibility\n";
                     size_t prefix_len = strlen(prefix);
                     size_t src_len = strlen(glshader->source);
@@ -832,8 +834,7 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                 glshader->is_converted_essl_320 = 0;
             } else {
                 if (check_version_compatibility(glshader->source)) {
-                    // bool isBSL = first_three_lines_contains_BSL(glshader->source);
-                    bool isBuiltInVariableConverted = is_glsl_builtin_converted(glshader->source);
+                                        bool isBuiltInVariableConverted = is_glsl_builtin_converted(glshader->source);
                     remove_before_version(glshader->source);
                     char* convertedSource = glshader->source;
                     if (!isBuiltInVariableConverted)
@@ -862,15 +863,15 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     free(convertedSource);
                     // Use SPIRV result only if conversion succeeded; fall back to FPE path otherwise
                     if (result != NULL && returnCode >= 0) {
-                        SHUT_LOGD("[shader] SPIRV path OK (returnCode=%d), using GLSL→ESSL converted source\n", returnCode);
+                        DBG(SHUT_LOGD("[shader] SPIRV path OK (returnCode=%d), using GLSL→ESSL converted source\n", returnCode));
                         glshader->converted =
                             strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
                                                                  &glshader->uniforms_declarations_count));
                         free(result);
                         glshader->is_converted_essl_320 = 1;
                     } else {
-                        SHUT_LOGD("[shader] SPIRV path FAILED (result=%p returnCode=%d), falling back to FPE path\n",
-                                       (void*)result, returnCode);
+                        DBG(SHUT_LOGD("[shader] SPIRV path FAILED (result=%p returnCode=%d), falling back to FPE path\n",
+                                       (void*)result, returnCode));
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
                         glshader->is_converted_essl_320 = 0;
@@ -878,21 +879,21 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     glshader->converted = process_uniform_declarations(
                         glshader->converted, glshader->uniforms_declarations, &glshader->uniforms_declarations_count);
 
-                    /*if (isBSL)*/ glshader->converted = bsl_patch(glshader->converted);
+                    glshader->converted = bsl_patch(glshader->converted);
                 } else {
                     int returnCode = 0;
                     char* result = GLSLtoGLSLES_c(glshader->source, glshader->type, globals4es.esversion, glsl_version,
                                                   &returnCode);
                     if (result != NULL && returnCode >= 0) {
-                        SHUT_LOGD("[shader] SPIRV path(bare) OK (returnCode=%d)\n", returnCode);
+                        DBG(SHUT_LOGD("[shader] SPIRV path(bare) OK (returnCode=%d)\n", returnCode));
                         glshader->converted =
                             strdup(process_uniform_declarations(result, glshader->uniforms_declarations,
                                                                  &glshader->uniforms_declarations_count));
                         free(result);
                         glshader->is_converted_essl_320 = 1;
                     } else {
-                        SHUT_LOGD("[shader] SPIRV path(bare) FAILED (result=%p returnCode=%d), fallback FPE\n",
-                                       (void*)result, returnCode);
+                        DBG(SHUT_LOGD("[shader] SPIRV path(bare) FAILED (result=%p returnCode=%d), fallback FPE\n",
+                                       (void*)result, returnCode));
                         if (result) free(result);
                         glshader->converted = strdup(ConvertShaderConditionally(glshader));
                         glshader->is_converted_essl_320 = 0;
@@ -901,9 +902,7 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
             }
             DBG(SHUT_LOGD("\n[INFO] [Shader] Converted Shader source: \n%s", glshader->converted))
 
-            // ===================================================================
-            // === ULTIMATE FIXUP PATCH v10 — Modern desktop GLSL → GLES 3.x
-            // ===================================================================
+            // Post-conversion fixup: adapt modern desktop GLSL to the target GLES 3.x dialect.
             if (glshader->converted && (glshader->type == GL_VERTEX_SHADER || glshader->type == GL_FRAGMENT_SHADER)) {
 
                 // Part 1: Force the correct GLSL ES version for BOTH shaders
@@ -989,9 +988,6 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                     }
                 }
             }
-            // ===================================================================
-            // === END ULTIMATE FIXUP PATCH v10
-            // ===================================================================
         }
 
         GLchar* finalSource = (glshader->converted) ? glshader->converted : glshader->source;
