@@ -86,6 +86,7 @@ typedef struct _globals4es {
 #endif
     char version[65];
     int use_mc_color;
+    int ignore_link_error; // cheat LINK_STATUS success for benign cross-stage varying-mismatch link errors
     int vgpu_dump;       // Whether vgpu dumps the shader input and output.
     int vgpu_force_conv; // Whether vgpu is forced to convert all shaders
     int vgpu_precision;  // The level of precision used by vgpu

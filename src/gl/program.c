@@ -13,6 +13,7 @@
 #include "shaderconv.h"
 #include "fpe_shader.h"
 #include "string_utils.h"
+#include "init.h"
 
 // #define DEBUG
 #ifdef DEBUG
@@ -967,11 +968,26 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
             GLsizei log_length;
             gles_glGetProgramiv(glprogram->id, GL_INFO_LOG_LENGTH, &log_length);
             DBG(SHUT_LOGD("Linker error length: %i\n", log_length));
-            if (log_length != 0) {
+            if (log_length > 0) {
                 LOAD_GLES2(glGetProgramInfoLog);
-                GLchar log_chars[log_length];
-                gles_glGetProgramInfoLog(glprogram->id, log_length, &log_length, log_chars);
-                DBG(SHUT_LOGD("%s", log_chars));
+                char *log_chars = (char*)malloc(log_length);
+                if (log_chars && gles_glGetProgramInfoLog) {
+                    gles_glGetProgramInfoLog(glprogram->id, log_length, &log_length, log_chars);
+                    DBG(SHUT_LOGD("%s", log_chars));
+                    // Cheat: swallow benign cross-stage varying-mismatch link errors
+                    // so the caller (e.g. Minecraft AsyncParticles) believes linking
+                    // succeeded and doesn't abort the process. Mirrors MobileGlues'
+                    // "Now try to cheat." behaviour.
+                    if (globals4es.ignore_link_error &&
+                        strstr(log_chars, "not declared in output from previous stage")) {
+                        DBG(SHUT_LOGD("Now try to cheat (benign varying mismatch). Reporting LINK_STATUS=GL_TRUE.\n"));
+                        free(log_chars);
+                        glprogram->linked = 1;
+                        noerrorShimNoPurge();
+                        return;
+                    }
+                }
+                free(log_chars);
             }
             // should DBG the linker error?
             DBG(SHUT_LOGD(" Link failled!\n"))
