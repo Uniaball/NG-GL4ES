@@ -836,11 +836,32 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
             // ===================================================================
             if (glshader->converted && (glshader->type == GL_VERTEX_SHADER ||
                                          glshader->type == GL_FRAGMENT_SHADER)) {
-                // Part 1: Normalise #version to device ESSL target
+                // Part 1: Normalise #version to device ESSL target, but only
+                // for ESSL shaders (#version 100 or #version XXX es).  Desktop
+                // GLSL (e.g. #version 330 compatibility) must stay as-is because
+                // promoting to ESSL changes the language rules (implicit int→float
+                // conversion is valid in desktop GLSL but illegal in ESSL) and
+                // introduces hundreds of type errors in BSL-like shaders.
                 {
-                    char* t = replace_version_to_es(glshader->converted,
-                                                    globals4es.esversion);
-                    if (t) { free(glshader->converted); glshader->converted = t; }
+                    int ver = getGLSLVersion(glshader->converted);
+                    int do_vnorm = (ver == 100);
+                    if (!do_vnorm && ver >= 300) {
+                        const char* vp = glshader->converted;
+                        while (*vp && isspace((unsigned char)*vp)) vp++;
+                        if (strncmp(vp, "#version", 8) == 0) {
+                            vp += 8;
+                            while (*vp && isspace((unsigned char)*vp)) vp++;
+                            while (*vp && *vp >= '0' && *vp <= '9') vp++;
+                            while (*vp && *vp == ' ') vp++;
+                            if (*vp == 'e' && *(vp + 1) == 's')
+                                do_vnorm = 1;
+                        }
+                    }
+                    if (do_vnorm) {
+                        char* t = replace_version_to_es(glshader->converted,
+                                                        globals4es.esversion);
+                        if (t) { free(glshader->converted); glshader->converted = t; }
+                    }
                 }
                 // Part 2: Modernise texture2D builtins, with masking of
                 //         FPE's ARB/EXT texture-lod helpers so the blind
