@@ -827,20 +827,80 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
             }
             DBG(SHUT_LOGD("\n[INFO] [Shader] Converted Shader source: \n%s", glshader->converted))
 
+            // ===================================================================
+            // Post-conversion normalisation: promote #version and modernise
+            // legacy keywords (varying/attribute/gl_FragColor) so shader
+            // stages from different paths (SPIRV vs FPE) can link together.
+            // Already-modern shaders (SPIRV 320 es, FPE 300+ es) have no
+            // legacy tokens to replace → no-op.
+            // ===================================================================
+            if (glshader->converted && (glshader->type == GL_VERTEX_SHADER ||
+                                         glshader->type == GL_FRAGMENT_SHADER)) {
+                // Part 1: Normalise #version to device ESSL target
+                {
+                    char* t = replace_version_to_es(glshader->converted,
+                                                    globals4es.esversion);
+                    if (t) { free(glshader->converted); glshader->converted = t; }
+                }
+                // Part 3: Convert legacy keywords
+                if (glshader->type == GL_VERTEX_SHADER) {
+                    if (strstr(glshader->converted, "attribute")) {
+                        char* t = replace_all(glshader->converted, "attribute", "in");
+                        if (t) { free(glshader->converted); glshader->converted = t; }
+                    }
+                    if (strstr(glshader->converted, "varying")) {
+                        char* t = replace_all(glshader->converted, "varying", "out");
+                        if (t) { free(glshader->converted); glshader->converted = t; }
+                    }
+                } else {
+                    // Fragment shader: varying -> in
+                    if (strstr(glshader->converted, "varying")) {
+                        char* t = replace_all(glshader->converted, "varying", "in");
+                        if (t) { free(glshader->converted); glshader->converted = t; }
+                    }
+                    // Part 4: gl_FragColor / gl_FragData[0] -> declared out variable
+                    {
+                        const char* frag_out = "_gl4es_FragColor";
+                        int need_decl = 0;
+                        if (strstr(glshader->converted, "gl_FragColor")) {
+                            char* t = replace_all(glshader->converted, "gl_FragColor",
+                                                  frag_out);
+                            if (t) { free(glshader->converted); glshader->converted = t; need_decl = 1; }
+                        }
+                        if (strstr(glshader->converted, "gl_FragData[0]")) {
+                            char* t = replace_all(glshader->converted, "gl_FragData[0]",
+                                                  frag_out);
+                            if (t) { free(glshader->converted); glshader->converted = t; need_decl = 1; }
+                        }
+                        if (need_decl) {
+                            // Insert "out highp vec4 _gl4es_FragColor;" before void main()
+                            char* m = strstr(glshader->converted, "void main");
+                            if (m) {
+                                size_t pre = m - glshader->converted;
+                                size_t rest = strlen(m);
+                                const char* decl = "out highp vec4 _gl4es_FragColor;\n";
+                                size_t dl = strlen(decl);
+                                char* out = (char*)malloc(pre + dl + rest + 1);
+                                if (out) {
+                                    memcpy(out, glshader->converted, pre);
+                                    memcpy(out + pre, decl, dl);
+                                    memcpy(out + pre + dl, m, rest);
+                                    out[pre + dl + rest] = '\0';
+                                    free(glshader->converted);
+                                    glshader->converted = out;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // ===================================================================
+
         }
 
         GLchar* finalSource = (glshader->converted) ? glshader->converted : glshader->source;
-        char* tempSource = NULL;
-        if (globals4es.es >= 3 && globals4es.esversion >= 300 && glshader->is_converted_essl_320) {
-            char* esSource = replace_version_to_es(finalSource, globals4es.esversion);
-            if (esSource) {
-                tempSource = esSource;
-                finalSource = esSource;
-            }
-        }
         const GLchar* sources[] = {finalSource};
         gles_glShaderSource(shader, 1, sources, NULL);
-        if (tempSource) free(tempSource);
 
         errorGL();
     } else
