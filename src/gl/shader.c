@@ -841,23 +841,6 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
             if (glsl_version < 140 && !isFPEShader) {
                 glshader->source = replace_version_line(glshader->source);
                 glsl_version = 460;
-                // If the source had no #version line (replace_version_line
-                // returned unchanged text), prepend one so the shader can go
-                // through the SPIRV path instead of falling back to FPE.
-                int ver = getGLSLVersion(glshader->source);
-                if (ver < 140) {
-                    DBG(SHUT_LOGD("[shader] No #version in source, prepending #version 330 compatibility\n"));
-                    const char* prefix = "#version 330 compatibility\n";
-                    size_t prefix_len = strlen(prefix);
-                    size_t src_len = strlen(glshader->source);
-                    char* with_ver = (char*)malloc(src_len + prefix_len + 1);
-                    if (with_ver) {
-                        memcpy(with_ver, prefix, prefix_len);
-                        memcpy(with_ver + prefix_len, glshader->source, src_len + 1);
-                        free(glshader->source);
-                        glshader->source = with_ver;
-                    }
-                }
             }
             if (glsl_version < 140 || (globals4es.es < 3 && globals4es.esversion < 300)) {
                 glshader->converted = strdup(ConvertShaderConditionally(glshader));
