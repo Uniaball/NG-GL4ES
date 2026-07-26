@@ -17,8 +17,12 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Update submodules to latest
-      run: git submodule update --remote --recursive
+    # NOTE(test-revert-glslang-bump): intentionally DO NOT run
+    #   git submodule update --remote --recursive
+    # here. That step ignores the pinned submodule commits and pulls glslang /
+    # SPIRV-Cross to their latest remote main, which would undo this branch's
+    # revert of 4108e6c and defeat the whole A/B test. We want the OLD glslang
+    # that bzlzhh (6e153a1) used, i.e. exactly the commits recorded in the tree.
 
     - name: Configure CMake
       run: |
