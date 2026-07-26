@@ -932,10 +932,30 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                 char* temp_v = force_replace_version(glshader->converted, target_version);
                 if (temp_v) { free(glshader->converted); glshader->converted = temp_v; }
 
-                // Part 2: Replace old texture2D with modern texture() for BOTH shaders
+                // Part 2: Modernize legacy desktop-GLSL texture2D* builtins to ESSL 300+.
+                // Mask the FPE/gl4es ARB texture-lod helper names (e.g. texture2DGradEXT,
+                // _gl4es_texture2DGrad) FIRST: the naive replace_all("texture2D","texture")
+                // that used to live here corrupted texture2DGradARB's FPE output into the
+                // nonexistent textureGradEXT and broke BSL parallax/POM shaders (only-sky
+                // regression introduced by commit 20b32ad). Those ARB variants must stay
+                // untouched; only the real builtin calls get modernized.
                 if (strstr(glshader->converted, "texture2D")) {
-                    char* temp_tex = replace_all(glshader->converted, "texture2D", "texture");
-                    if (temp_tex) { free(glshader->converted); glshader->converted = temp_tex; }
+                    char* s = glshader->converted;
+                    char* t;
+                    // protect gl4es ARB helpers so the rewrites below cannot touch them
+                    t = replace_all(s, "_gl4es_texture", "gl4esMaskTex");
+                    if (t) { free(s); s = t; }
+                    // longer / more specific names first so they are not partially matched
+                    t = replace_all(s, "texture2DProjGrad(", "textureProjGrad("); if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DProjLod(",  "textureProjLod(");  if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DGrad(",     "textureGrad(");     if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DProj(",     "textureProj(");     if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DLod(",      "textureLod(");      if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2D(",         "texture(");         if (t) { free(s); s = t; }
+                    // restore gl4es ARB helpers
+                    t = replace_all(s, "gl4esMaskTex", "_gl4es_texture");
+                    if (t) { free(s); s = t; }
+                    glshader->converted = s;
                 }
 
                 // Part 3.0: Add default precision for BOTH shaders (ESSL 300+ requires precision)
