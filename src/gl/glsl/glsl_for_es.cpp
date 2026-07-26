@@ -809,8 +809,11 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     TBuiltInResource TBuiltInResource_resources = InitResources();
 
     if (!shader.parse(&TBuiltInResource_resources, glsl_version, true, EShMsgDefault)) {
-        DBG(SHUT_LOGD("[glsl-for-es] glslang compile ERROR: %s\n", shader.getInfoLog()));
-        DBG(SHUT_LOGD("[glsl-for-es] glslang debug: %s\n", shader.getInfoDebugLog()));
+        // TEMP(diagnostic): un-gated so remote CI builds surface the exact glslang
+        // reason a shader fails the SPIRV path (e.g. BSL 1.12.2 shader 78). Revert
+        // once the only-sky root cause is fixed.
+        SHUT_LOGD("[glsl-for-es] glslang compile ERROR: %s\n", shader.getInfoLog());
+        SHUT_LOGD("[glsl-for-es] glslang debug: %s\n", shader.getInfoDebugLog());
         errc = -1;
         return {};
     }
@@ -819,8 +822,9 @@ std::vector<unsigned int> glsl_to_spirv(GLenum shader_type, int glsl_version, co
     program.addShader(&shader);
 
     if (!program.link(EShMsgDefault)) {
-        DBG(SHUT_LOGD("[glsl-for-es] glslang link ERROR: %s\n", program.getInfoLog()));
-        DBG(SHUT_LOGD("[glsl-for-es] glslang link debug: %s\n", program.getInfoDebugLog()));
+        // TEMP(diagnostic): un-gated, see note above.
+        SHUT_LOGD("[glsl-for-es] glslang link ERROR: %s\n", program.getInfoLog());
+        SHUT_LOGD("[glsl-for-es] glslang link debug: %s\n", program.getInfoDebugLog());
         errc = -1;
         return {};
     }
@@ -860,7 +864,8 @@ std::string spirv_to_essl(std::vector<unsigned int> spirv, unsigned int essl_ver
     spvc_compiler_compile(compiler_glsl, &result);
 
     if (!result) {
-        DBG(SHUT_LOGD("Error: unexpected error in spirv-cross."));
+        // TEMP(diagnostic): un-gated so spirv-cross failures are visible in CI logs.
+        SHUT_LOGD("[glsl-for-es] spirv_to_essl (spirv-cross) ERROR: unexpected null result\n");
         errc = -1;
         return "";
     }
@@ -879,7 +884,9 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
 
     std::string correct_glsl_str = preprocess_glsl(glsl_code, glsl_type, &atomicCounterEmulated);
     int glsl_version = get_or_add_glsl_version(correct_glsl_str);
-    DBG(SHUT_LOGD("[glsl-for-es] glsl_version=%d essl_target=%d\n", glsl_version, essl_version));
+    // TEMP(diagnostic): un-gated so remote CI builds show per-shader SPIRV path
+    // progress/failure. Revert once the only-sky root cause is fixed.
+    SHUT_LOGD("[glsl-for-es] glsl_version=%d essl_target=%d type=0x%x\n", glsl_version, essl_version, glsl_type);
 
     if (!glslang_inited) {
         glslang::InitializeProcess();
@@ -890,15 +897,15 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     std::vector<unsigned int> spirv_code = glsl_to_spirv(glsl_type, glsl_version, s, errc);
     if (errc != 0) {
         return_code = -1;
-        DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc));
+        SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc);
         return "";
     }
-    DBG(SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size()));
+    SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size());
     errc = 0;
     std::string essl = spirv_to_essl(spirv_code, essl_version, errc);
     if (errc != 0) {
         return_code = -2;
-        DBG(SHUT_LOGD("[glsl-for-es] spirv_to_essl FAILED: errc=%d\n", errc));
+        SHUT_LOGD("[glsl-for-es] spirv_to_essl FAILED: errc=%d\n", errc);
         return "";
     }
 
