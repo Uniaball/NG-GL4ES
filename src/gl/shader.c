@@ -933,28 +933,40 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                 if (temp_v) { free(glshader->converted); glshader->converted = temp_v; }
 
                 // Part 2: Modernize legacy desktop-GLSL texture2D* builtins to ESSL 300+.
-                // Mask the FPE/gl4es ARB texture-lod helper names (e.g. texture2DGradEXT,
-                // _gl4es_texture2DGrad) FIRST: the naive replace_all("texture2D","texture")
-                // that used to live here corrupted texture2DGradARB's FPE output into the
-                // nonexistent textureGradEXT and broke BSL parallax/POM shaders (only-sky
-                // regression introduced by commit 20b32ad). Those ARB variants must stay
-                // untouched; only the real builtin calls get modernized.
+                // The FPE/ConvertShaderConditionally path emits backwards macros when porting
+                // old fixed-function shaders to #version 320 es, e.g.
+                //     #define texture texture2D     (and #define textureProj texture2DProj)
+                // texture2D does NOT exist in ESSL 300+, so those macros are wrong and must be
+                // neutralized (the old naive replace_all("texture2D","texture") did this as a
+                // side effect). We therefore rewrite BOTH call sites (texture2D(...)) AND the
+                // bare token in the #define lines. But we must NOT touch the gl4es ARB
+                // texture-lod helpers (texture2DGradARB / texture2DGradEXT / _gl4es_texture*),
+                // or BSL parallax/POM shaders break (only-sky regression from commit 20b32ad).
+                // So: mask the ARB helpers, do the modernizing rewrites (longest first so
+                // specific overloads win), then restore the helpers.
                 if (strstr(glshader->converted, "texture2D")) {
                     char* s = glshader->converted;
                     char* t;
-                    // protect gl4es ARB helpers so the rewrites below cannot touch them
-                    t = replace_all(s, "_gl4es_texture", "gl4esMaskTex");
-                    if (t) { free(s); s = t; }
-                    // longer / more specific names first so they are not partially matched
+                    // (a) protect gl4es ARB texture-lod helpers from the rewrites below
+                    t = replace_all(s, "_gl4es_texture",  "gl4esMaskTex");     if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DGradARB", "gl4esMaskGradARB"); if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DGradEXT", "gl4esMaskGradEXT"); if (t) { free(s); s = t; }
+                    // (b) call-site rewrites: longest / most specific first
                     t = replace_all(s, "texture2DProjGrad(", "textureProjGrad("); if (t) { free(s); s = t; }
                     t = replace_all(s, "texture2DProjLod(",  "textureProjLod(");  if (t) { free(s); s = t; }
                     t = replace_all(s, "texture2DGrad(",     "textureGrad(");     if (t) { free(s); s = t; }
                     t = replace_all(s, "texture2DProj(",     "textureProj(");     if (t) { free(s); s = t; }
                     t = replace_all(s, "texture2DLod(",      "textureLod(");      if (t) { free(s); s = t; }
                     t = replace_all(s, "texture2D(",         "texture(");         if (t) { free(s); s = t; }
-                    // restore gl4es ARB helpers
-                    t = replace_all(s, "gl4esMaskTex", "_gl4es_texture");
-                    if (t) { free(s); s = t; }
+                    // (c) bare rewrites for the backwards #define lines, e.g.
+                    //     "#define texture texture2D" -> "#define texture texture"
+                    //     (longest first so texture2DProj is handled before texture2D)
+                    t = replace_all(s, "texture2DProj", "textureProj"); if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2D",     "texture");     if (t) { free(s); s = t; }
+                    // (d) restore the protected ARB helpers
+                    t = replace_all(s, "gl4esMaskGradEXT", "texture2DGradEXT");  if (t) { free(s); s = t; }
+                    t = replace_all(s, "gl4esMaskGradARB", "texture2DGradARB");  if (t) { free(s); s = t; }
+                    t = replace_all(s, "gl4esMaskTex",     "_gl4es_texture");    if (t) { free(s); s = t; }
                     glshader->converted = s;
                 }
 
