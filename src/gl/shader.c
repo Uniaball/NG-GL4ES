@@ -842,6 +842,53 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
                                                     globals4es.esversion);
                     if (t) { free(glshader->converted); glshader->converted = t; }
                 }
+                // Part 2: Modernise texture2D builtins, with masking of
+                //         FPE's ARB/EXT texture-lod helpers so the blind
+                //         texture2D->texture rewrite cannot mangle
+                //         texture2DGradEXT into the nonexistent textureGradEXT.
+                {
+                    char* s = glshader->converted;
+                    char* t;
+                    // 2a) Mask ARB/EXT helpers
+                    t = replace_all(s, "_gl4es_texture",   "gl4esMaskTex");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DGradARB",  "textureGradARBmask");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DGradEXT",  "textureGradEXTmask");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "textureCubeGradEXT","textureCubeGradEXTmask");
+                    if (t) { free(s); s = t; }
+                    // 2b) Real builtin calls, longer/more specific first
+                    t = replace_all(s, "texture2DProjGrad(", "textureProjGrad(");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DProjLod(",  "textureProjLod(");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DGrad(",     "textureGrad(");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DProj(",     "textureProj(");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2DLod(",      "textureLod(");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2D(",         "texture(");
+                    if (t) { free(s); s = t; }
+                    // 2c) Neutralise FPE backwards macro:
+                    //     #define texture texture2D  ->  #define texture texture
+                    //     (bare-token replace AFTER the call-site rewrites above)
+                    t = replace_all(s, "texture2DProj", "textureProj");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "texture2D",     "texture");
+                    if (t) { free(s); s = t; }
+                    // 2d) Restore masked helpers
+                    t = replace_all(s, "textureGradEXTmask",     "texture2DGradEXT");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "textureGradARBmask",     "texture2DGradARB");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "textureCubeGradEXTmask", "textureCubeGradEXT");
+                    if (t) { free(s); s = t; }
+                    t = replace_all(s, "gl4esMaskTex", "_gl4es_texture");
+                    if (t) { free(s); s = t; }
+                    glshader->converted = s;
+                }
                 // Part 3: Convert legacy keywords
                 if (glshader->type == GL_VERTEX_SHADER) {
                     if (strstr(glshader->converted, "attribute")) {
