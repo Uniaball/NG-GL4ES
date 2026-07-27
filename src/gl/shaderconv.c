@@ -222,9 +222,9 @@ static const char* gl4es_frontSecondaryColorSource = "varying lowp vec4 _gl4es_F
 
 static const char* gl4es_backSecondaryColorSource = "varying lowp vec4 _gl4es_BackSecondaryColor;\n";
 
-static const char* gl4es_texcoordSource = "varying highp vec4 _gl4es_TexCoord[%d];\n";
+static const char* gl4es_texcoordSource = "varying mediump vec4 _gl4es_TexCoord[%d];\n";
 
-static const char* gl4es_texcoordSourceAlt = "varying highp vec4 _gl4es_TexCoord_%d;\n";
+static const char* gl4es_texcoordSourceAlt = "varying mediump vec4 _gl4es_TexCoord_%d;\n";
 
 static const char* gl4es_fogcoordSource = "varying mediump float _gl4es_FogFragCoord;\n";
 
@@ -442,23 +442,15 @@ char* ConvertShaderBuiltInVariableOnly(const char* pEntry, int isVertex, shaderc
     if (strstr(Tmp, "gl_FrontColor") || need->need_color) {
         if (need->need_color < 1) need->need_color = 1;
         nvarying += 1;
-        // Idempotency guard: a re-converted source (e.g. SPIRV->FPE fallback on an
-        // already builtin-converted source) may already declare _gl4es_FrontColor;
-        // inserting the declaration again causes a "redefinition" error on GLES.
-        if (!strstr(Tmp, "vec4 _gl4es_FrontColor;")) {
-            Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_frontColorSource, Tmp, &tmpsize);
-            headline += CountLine(gl4es_frontColorSource);
-        }
+        Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_frontColorSource, Tmp, &tmpsize);
+        headline += CountLine(gl4es_frontColorSource);
         Tmp = InplaceReplace(Tmp, &tmpsize, "gl_FrontColor", "_gl4es_FrontColor");
     }
     if (strstr(Tmp, "gl_BackColor") || (need->need_color == 2)) {
         need->need_color = 2;
         nvarying += 1;
-        // Idempotency guard: same rationale as _gl4es_FrontColor above.
-        if (!strstr(Tmp, "vec4 _gl4es_BackColor;")) {
-            Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_backColorSource, Tmp, &tmpsize);
-            headline += CountLine(gl4es_backColorSource);
-        }
+        Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_backColorSource, Tmp, &tmpsize);
+        headline += CountLine(gl4es_backColorSource);
         Tmp = InplaceReplace(Tmp, &tmpsize, "gl_BackColor", "_gl4es_BackColor");
     }
     if (strstr(Tmp, "gl_SecondaryColor") || need->need_secondary) {
@@ -965,23 +957,24 @@ char* ConvertShaderBuiltInVariableOnly(const char* pEntry, int isVertex, shaderc
         // r=textureLod(s,c,l);return vec4(r);} vec4 shadow1DProjLod(sampler1DShadow s, vec4 c,float l){float
         // r=textureProjLod(s,c,l);return vec4(r);} vec4 shadow2DProjLod(sampler2DShadow s, vec4 c,float l){float
         // r=textureProjLod(s,c,l);return vec4(r);}
-        // Insert shadow lookup wrappers ONLY for the variants actually used by the
-        // source. Do NOT blanket-insert: sampler1DShadow is a reserved word in
-        // GLSL ES, so an unconditional shadow1D wrapper makes the whole shader
-        // fail to compile (seen on BSL v10 @ MC 1.12.2 OptiFine, FPE fallback path)
-        // even when the pack never calls shadow1D. 2D variants are valid ES3.
-        if (strstr(Tmp, "shadow2D(") && !strstr(Tmp, "vec4 shadow2D(sampler2DShadow s, vec3 c)")) {
-            Tmp = InplaceInsert(GetLine(Tmp, headline),
-                                "vec4 shadow2D(sampler2DShadow s, vec3 c){float r=texture(s,c);return vec4(r);}\n ",
-                                Tmp, &tmpsize);
+        const char* wrapper =
+            "vec4 shadow1D(sampler1DShadow s, vec3 c){float r=texture(s,c);return vec4(r);}\n "
+            "//vec4 shadow1D(sampler1DShadow s, vec3 c,float b){float r=texture(s,c,b);return vec4(r);}\n "
+            "vec4 shadow2D(sampler2DShadow s, vec3 c){float r=texture(s,c);return vec4(r);}\n "
+            "//vec4 shadow2D(sampler2DShadow s, vec3 c,float b){float r=texture(s,c,b);return vec4(r);}\n "
+            "vec4 shadow1DProj(sampler1DShadow s, vec4 c){float r=textureProj(s,c);return vec4(r);}\n "
+            "//vec4 shadow1DProj(sampler1DShadow s, vec4 c,float b){float r=textureProj(s,c,b);return vec4(r);}\n "
+            "vec4 shadow2DProj(sampler2DShadow s, vec4 c){float r=textureProj(s,c);return vec4(r);}\n "
+            "//vec4 shadow2DProj(sampler2DShadow s, vec4 c,float b){float r=textureProj(s,c,b);return vec4(r);}\n "
+            "//vec4 shadow1DLod(sampler1DShadow s, vec3 c,float l){float r=textureLod(s,c,l);return vec4(r);}\n "
+            "//vec4 shadow2DLod(sampler2DShadow s, vec3 c,float l){float r=textureLod(s,c,l);return vec4(r);}\n "
+            "//vec4 shadow1DProjLod(sampler1DShadow s, vec4 c,float l){float r=textureProjLod(s,c,l);return "
+            "vec4(r);}\n "
+            "//vec4 shadow2DProjLod(sampler2DShadow s, vec4 c,float l){float r=textureProjLod(s,c,l);return "
+            "vec4(r);}\n";
+        if (!strstr(Tmp, "vec4 shadow1D(sampler1DShadow s, vec3 c)")) {
+            Tmp = InplaceInsert(GetLine(Tmp, headline), wrapper, Tmp, &tmpsize);
         }
-        if (strstr(Tmp, "shadow2DProj(") && !strstr(Tmp, "vec4 shadow2DProj(sampler2DShadow s, vec4 c)")) {
-            Tmp = InplaceInsert(GetLine(Tmp, headline),
-                                "vec4 shadow2DProj(sampler2DShadow s, vec4 c){float r=textureProj(s,c);return vec4(r);}\n ",
-                                Tmp, &tmpsize);
-        }
-        // shadow1D/shadow1DProj cannot be emulated on GLES (no sampler1DShadow);
-        // sources using them are unfixable here, so no wrapper is emitted.
 
         char* GLESBackport;
         if (doInsertDefinitions) {
@@ -1054,8 +1047,7 @@ char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t* need, i
     int wanthighp = !fpeShader;
     if (wanthighp && !hardext.highp) wanthighp = 0;
     int versionHeader = 0;
-    if ((globals4es.dbgshaderconv & maskbefore) == maskbefore)
-        printf("version string: %s\n", versionString);
+    printf("version string: %s", versionString);
     if (versionString && (strcmp(versionString, "120") == 0 || strcmp(versionString, "110") == 0 ||
                           strstr(versionString, "150") != NULL))
         version120 = forwardPort ? 1 : 0;
@@ -1321,23 +1313,15 @@ char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t* need, i
     if (strstr(Tmp, "gl_FrontColor") || need->need_color) {
         if (need->need_color < 1) need->need_color = 1;
         nvarying += 1;
-        // Idempotency guard: a re-converted source (e.g. SPIRV->FPE fallback on an
-        // already builtin-converted source) may already declare _gl4es_FrontColor;
-        // inserting the declaration again causes a "redefinition" error on GLES.
-        if (!strstr(Tmp, "vec4 _gl4es_FrontColor;")) {
-            Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_frontColorSource, Tmp, &tmpsize);
-            headline += CountLine(gl4es_frontColorSource);
-        }
+        Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_frontColorSource, Tmp, &tmpsize);
+        headline += CountLine(gl4es_frontColorSource);
         Tmp = InplaceReplace(Tmp, &tmpsize, "gl_FrontColor", "_gl4es_FrontColor");
     }
     if (strstr(Tmp, "gl_BackColor") || (need->need_color == 2)) {
         need->need_color = 2;
         nvarying += 1;
-        // Idempotency guard: same rationale as _gl4es_FrontColor above.
-        if (!strstr(Tmp, "vec4 _gl4es_BackColor;")) {
-            Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_backColorSource, Tmp, &tmpsize);
-            headline += CountLine(gl4es_backColorSource);
-        }
+        Tmp = InplaceInsert(GetLine(Tmp, headline), gl4es_backColorSource, Tmp, &tmpsize);
+        headline += CountLine(gl4es_backColorSource);
         Tmp = InplaceReplace(Tmp, &tmpsize, "gl_BackColor", "_gl4es_BackColor");
     }
     if (strstr(Tmp, "gl_SecondaryColor") || need->need_secondary) {
