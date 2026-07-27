@@ -922,20 +922,12 @@ char* CoerceIntToFloat(char* source, int* sourceLength) {
     // Attempt and loop unrolling -> worked well, time to fix my shit I guess
     source = ReplaceVariableName(source, sourceLength, "int", "float");
     source = WrapFunction(source, sourceLength, "int", "float", "\n ");
-    // If the shader uses uvec types, it needs unsigned integer semantics
-    // (e.g. bitwise ops like &, |, ^, <<, >>). Converting uvec->vec would
-    // break those operations. Skip uint/uvec conversions in that case.
-    int has_uvec = (strstr(source, "uvec") != NULL);
-    if (!has_uvec) {
-        source = ReplaceVariableName(source, sourceLength, "uint", "float");
-        source = WrapFunction(source, sourceLength, "uint", "float", "\n ");
-    }
+    source = ReplaceVariableName(source, sourceLength, "uint", "float");
+    source = WrapFunction(source, sourceLength, "uint", "float", "\n ");
 
     // TODO Yes I could just do the same as above but I'm lazy at times
     source = InplaceReplaceSimple(source, sourceLength, "ivec", "vec");
-    if (!has_uvec) {
-        source = InplaceReplaceSimple(source, sourceLength, "uvec", "vec");
-    }
+    source = InplaceReplaceSimple(source, sourceLength, "uvec", "vec");
 
     source = InplaceReplaceSimple(source, sourceLength, "isampleBuffer", "sampleBuffer");
     source = InplaceReplaceSimple(source, sourceLength, "usampleBuffer", "sampleBuffer");

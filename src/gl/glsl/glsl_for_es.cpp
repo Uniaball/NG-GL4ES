@@ -735,6 +735,44 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
     replace_all(ret, "#ifdef GL_ARB_derivative_control", "#if 0");
     replace_all(ret, "#ifndef GL_ARB_derivative_control", "#if 1");
 
+    // GL_ARB_shader_texture_lod / GL_EXT_shader_texture_lod provide texelFetch
+    // gradient overloads (texture2DGradARB, textureCubeGradARB, texture2DProjGradARB
+    // and their *EXT twins) that glslang does NOT recognise when compiling for the
+    // OpenGL/Vulkan client. Map them to the ESSL 3.0 core equivalents that glslang
+    // does support; spirv-cross then emits them correctly for the target ESSL.
+    // Without this, BSL 1.12.2 (deferred/GBuffers shaders) fails the SPIRV path and
+    // falls back to FPE, whose forward-port rewrites #version 330 compat -> 320 es
+    // and breaks every implicit int->float conversion in the shader.
+    //
+    // Handle both tight and spaced variants because BSL shaders sometimes have
+    // whitespace between the function name and opening parenthesis (e.g. after
+    // OptiFine #include expansion or line-directive removal).
+    replace_all(ret, "texture2DGradARB(", "textureGrad(");
+    replace_all(ret, "texture2DGradARB (", "textureGrad (");
+    replace_all(ret, "texture2DProjGradARB(", "textureProjGrad(");
+    replace_all(ret, "texture2DProjGradARB (", "textureProjGrad (");
+    replace_all(ret, "textureCubeGradARB(", "textureGrad(");
+    replace_all(ret, "textureCubeGradARB (", "textureGrad (");
+    replace_all(ret, "texture2DGradEXT(", "textureGrad(");
+    replace_all(ret, "texture2DGradEXT (", "textureGrad (");
+    replace_all(ret, "texture2DProjGradEXT(", "textureProjGrad(");
+    replace_all(ret, "texture2DProjGradEXT (", "textureProjGrad (");
+    replace_all(ret, "textureCubeGradEXT(", "textureGrad(");
+    replace_all(ret, "textureCubeGradEXT (", "textureGrad (");
+    //
+    // Also handle indirect usage via #define macros, e.g.
+    //   #define SHADOW_GRAD texture2DGradARB
+    // which preprocess_glsl cannot rewrite at the macro definition site.
+    // We inject a #define that maps the legacy name to the core function
+    // so that any remaining references (inside #ifdef blocks, macro
+    // expansions, etc.) resolve correctly in glslang.
+    replace_all(ret, "texture2DGradARB", "textureGrad");
+    replace_all(ret, "texture2DProjGradARB", "textureProjGrad");
+    replace_all(ret, "textureCubeGradARB", "textureGrad");
+    replace_all(ret, "texture2DGradEXT", "textureGrad");
+    replace_all(ret, "texture2DProjGradEXT", "textureProjGrad");
+    replace_all(ret, "textureCubeGradEXT", "textureGrad");
+
     // Polyfill transpose()
     replace_all(ret, "const mat3 rotInverse = transpose(rot);",
                 "const mat3 rotInverse = mat3(rot[0][0], rot[1][0], rot[2][0], rot[0][1], rot[1][1], rot[2][1], "
@@ -749,6 +787,43 @@ std::string preprocess_glsl(const std::string& glsl, GLenum shaderType, bool* at
     }
 
     inject_ngg_macro_definition(ret);
+
+    // TEMP(diagnostic): check #if/#endif balance after all preprocessing.
+    // BSL 1.12.2 shaders have deeply nested conditional compilation blocks;
+    // if any step broke the balance, glslang will report "missing #endif"
+    // and cascade into unrelated errors (e.g. "texture2DGradARB not found").
+    // Revert once the only-sky root cause is fixed.
+    {
+        int if_count = 0, endif_count = 0;
+        size_t pos = 0;
+        while (pos < ret.size()) {
+            // find next line start
+            size_t nl = ret.find('\n', pos);
+            if (nl == std::string::npos) nl = ret.size();
+            // skip leading whitespace
+            size_t line = pos;
+            while (line < nl && (ret[line] == ' ' || ret[line] == '\t')) line++;
+            if (line < nl && ret[line] == '#') {
+                line++;
+                while (line < nl && (ret[line] == ' ' || ret[line] == '\t')) line++;
+                if (line + 2 <= nl && ret.compare(line, 2, "if") == 0) {
+                    char c = (line + 2 < nl) ? ret[line + 2] : 0;
+                    if (c == ' ' || c == '\t' || c == '(' ||
+                        (line + 4 <= nl && ret.compare(line + 2, 3, "def") == 0) ||   // #ifdef
+                        (line + 5 <= nl && ret.compare(line + 2, 4, "ndef") == 0)) {   // #ifndef
+                        if_count++;
+                    }
+                } else if (line + 5 <= nl && ret.compare(line, 5, "endif") == 0) {
+                    endif_count++;
+                }
+            }
+            pos = nl + 1;
+        }
+        if (if_count != endif_count) {
+            SHUT_LOGD("[glsl-for-es] WARNING: #if/#endif imbalance detected: %d #if-like vs %d #endif\n",
+                      if_count, endif_count);
+        }
+    }
 
     *atomicCounterEmulated = process_non_opaque_atomic_to_ssbo(ret);
     return ret;
@@ -898,6 +973,17 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
     if (errc != 0) {
         return_code = -1;
         SHUT_LOGD("[glsl-for-es] glsl_to_spirv FAILED: errc=%d\n", errc);
+        // TEMP(diagnostic): dump the preprocessed shader so we can inspect
+        // what glslang actually saw (e.g. to diagnose BSL #endif imbalance
+        // or texture2DGradARB not being replaced). Revert once the only-sky
+        // root cause is fixed.
+        size_t dump_len = correct_glsl_str.size();
+        if (dump_len > 4000) dump_len = 4000;
+        SHUT_LOGD("[glsl-for-es] --- preprocessed shader (first %zu of %zu chars) ---\n%.*s\n",
+                  dump_len, correct_glsl_str.size(), (int)dump_len, correct_glsl_str.c_str());
+        if (correct_glsl_str.size() > 4000) {
+            SHUT_LOGD("[glsl-for-es] --- (truncated, total %zu chars) ---\n", correct_glsl_str.size());
+        }
         return "";
     }
     SHUT_LOGD("[glsl-for-es] glsl_to_spirv OK: %zu words\n", spirv_code.size());
