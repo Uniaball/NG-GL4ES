@@ -346,8 +346,18 @@ std::string process_uniform_declarations(const std::string& glslCode) {
 }
 
 std::string processOutColorLocations(const std::string& glslCode) {
-    const static std::regex pattern(R"(\n(out highp vec4 outColor)(\d+);)");
-    const std::string replacement = "\nlayout(location=$2) $1$2;";
+    // Match any fragment-shader output declaration that lacks an explicit
+    // layout(location=N) qualifier, and inject one. The old regex only
+    // matched spirv-cross output named "outColorN", but spirv-cross may
+    // preserve the input shader's original output names (e.g.
+    // vgpu_FragDataN, _entryPointOutput, etc.). Without location
+    // qualifiers all outputs land on location 0, breaking MRT.
+    //
+    // Pattern: \n <opt-ws> out <precision> <type> <name><digits> ;
+    // Negative lookahead skips lines that already have layout(...).
+    const static std::regex pattern(
+        "\\n(\\s*)(?!layout\\s*\\()(out\\s+\\w+\\s+\\w+\\s+)(\\w+)(\\d+)\\s*;");
+    const std::string replacement = "\n$1layout(location=$4) $2$3$4;";
     return std::regex_replace(glslCode, pattern, replacement);
 }
 
@@ -1001,6 +1011,23 @@ std::string GLSLtoGLSLES_2(const char* glsl_code, GLenum glsl_type, unsigned int
         essl = removeLayoutBinding(essl);
     }
     essl = processOutColorLocations(essl);
+
+    // TEMP(diagnostic): log fragment-shader output declarations so we can
+    // verify that layout(location=N) qualifiers were added correctly by
+    // processOutColorLocations. Revert once the MRT/only-sky root cause
+    // is fixed.
+    if (glsl_type == GL_FRAGMENT_SHADER) {
+        size_t out_pos = essl.rfind("\nout ");
+        if (out_pos == std::string::npos) out_pos = essl.find("out ");
+        if (out_pos != std::string::npos) {
+            size_t dump_len = essl.size() - out_pos;
+            if (dump_len > 500) dump_len = 500;
+            // go back to the start of the line
+            while (out_pos > 0 && essl[out_pos - 1] != '\n') out_pos--;
+            SHUT_LOGD("[glsl-for-es] output declarations:\n%.*s\n", (int)dump_len, essl.c_str() + out_pos);
+        }
+    }
+
     essl = forceSupporterOutput(essl);
 
     DBG(SHUT_LOGD("Originally GLSL to GLSL ES Complete: \n%s", essl.c_str()))
