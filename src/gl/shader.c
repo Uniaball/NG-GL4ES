@@ -605,15 +605,17 @@ char* bsl_patch(const char* glsl) {
     if (globals4es.logshader &&
         (strstr(glsl, "cloudBlendOpacity") || strstr(glsl, "colortex") ||
          strstr(glsl, "temporalColor") || strstr(glsl, "vgpu_FragData1"))) {
-        SHUT_LOGD("[bsl_patch] match: cloud=%d temporal=%d vl=%d bloom=%d glow=%d\n",
+        SHUT_LOGD("[bsl_patch] match: cloud=%d temporal=%d vl=%d vlAlbedo=%d bloom=%d glow=%d\n",
                   strstr(glsl, "cloudBlendOpacity = step(viewLength, cloudViewLength);") != NULL,
                   strstr(glsl, "vgpu_FragData1 = vec4(temporalData, temporalColor);") != NULL,
                   strstr(glsl, "vgpu_FragData1 = vec4(vl, 1.0);") != NULL,
+                  strstr(glsl, "vgpu_FragData1 = vec4(vlAlbedo, 1.0);") != NULL,
                   strstr(glsl, "highp vec3 bloom = texture(colortex1, ((coord / vec2(scale)) + offset) * resScale).xyz;") != NULL,
                   strstr(glsl, "highp float isGlowing = texture(colortex3, texCoord).z;") != NULL);
         bsl_patch_dump_line(glsl, "cloudBlendOpacity");
         bsl_patch_dump_line(glsl, "temporalColor");
         bsl_patch_dump_line(glsl, "= vec4(vl");
+        bsl_patch_dump_line(glsl, "vlAlbedo");
         bsl_patch_dump_line(glsl, "bloom = texture");
         bsl_patch_dump_line(glsl, "isGlowing");
     }
@@ -628,6 +630,8 @@ char* bsl_patch(const char* glsl) {
     const char* new4 = "highp vec3 bloom = vec3(0.0, 0.0, 0.0);";
     const char* old5 = "highp float isGlowing = texture(colortex3, texCoord).z;";
     const char* new5 = "highp float isGlowing = 0.0;";
+    const char* old6 = "vgpu_FragData1 = vec4(vlAlbedo, 1.0);";
+    const char* new6 = "vgpu_FragData1 = color;";
     char* s = replace_all(glsl, old1, new1);
     if (!s) return NULL;
     char* s2 = replace_all(s, old2, new2);
@@ -642,9 +646,12 @@ char* bsl_patch(const char* glsl) {
     char* s5 = replace_all(s4, old5, new5);
     free(s4);
     if (!s5) return NULL;
+    char* s6 = replace_all(s5, old6, new6);
+    free(s5);
+    if (!s6) return NULL;
 
     const char* trigger = "highp float quality[";
-    char* cur = s5;
+    char* cur = s6;
 
     if (strstr(cur, trigger) != NULL) {
         const char* anchor0 = "layout(location = 0) out highp vec4 vgpu_FragData0;";
