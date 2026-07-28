@@ -346,8 +346,14 @@ std::string process_uniform_declarations(const std::string& glslCode) {
 }
 
 std::string processOutColorLocations(const std::string& glslCode) {
-    const static std::regex pattern(R"(\n(out highp vec4 outColor)(\d+);)");
-    const std::string replacement = "\nlayout(location=$2) $1$2;";
+    // 旧正则只匹配 spirv-cross 输出名 outColorN，但 spirv-cross 保留输入着色器
+    // 原始输出名（vgpu_FragDataN、_entryPointOutput 等），导致这些声明得不到
+    // layout(location=N) 限定符，GLES 链接器把所有 fragment 输出分配到
+    // location 0，MRT 管线破裂。泛化为匹配任意 out <precision> <type> <name><digits>;
+    // 负向先行断言跳过已有 layout(...) 的行，避免重复限定符。
+    const static std::regex pattern(
+        "\\n(\\s*)(?!layout\\s*\\()(out\\s+\\w+\\s+\\w+\\s+)(\\w+)(\\d+)\\s*;");
+    const std::string replacement = "\n$1layout(location=$4) $2$3$4;";
     return std::regex_replace(glslCode, pattern, replacement);
 }
 
