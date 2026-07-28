@@ -631,7 +631,7 @@ char* bsl_patch(const char* glsl) {
     const char* old5 = "highp float isGlowing = texture(colortex3, texCoord).z;";
     const char* new5 = "highp float isGlowing = 0.0;";
     const char* old6 = "vgpu_FragData1 = vec4(vlAlbedo, 1.0);";
-    const char* new6 = "vgpu_FragData1 = color;";
+    const char* new6 = "vgpu_FragData1 = vgpu_FragData0;";
     char* s = replace_all(glsl, old1, new1);
     if (!s) return NULL;
     char* s2 = replace_all(s, old2, new2);
